@@ -213,6 +213,7 @@ const createSoundManager = () => {
     playProjectile(projectile = {}) {
       const type = projectile.type || "";
       if (["spirit", "bomb"].includes(type)) return this.play("fireCast");
+      if (["heartfire"].includes(type)) return this.play("holyCast");
       if (["ring", "tracker", "page", "word", "cross_laser"].includes(type)) return this.play("iceArcane");
       if (["sprout", "bird"].includes(type)) return this.play("natureCast");
       if (["dagger", "cone", "knight", "steed"].includes(type)) return this.play("collision");
