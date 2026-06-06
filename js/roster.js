@@ -99,6 +99,36 @@ const ROSTER = {
               else if(hP>=0.25){ b.scalingValue=`卷三：騎士與駿馬`; if((b.knightTimer+=DT)>=5){ b.knightTimer=0; const t=eng.getNearestEnemy(b); if(t){ const n=normalize(t.x-b.x,t.y-b.y); eng.spawnProjectile({type:'knight',x:b.x,y:b.y,vx:n.x*1200,vy:n.y*1200,radius:14,color:'#CBD5E1',ownerId:b.uniqueId,damage:15,bounces:99,lifespan:8,penetrating:true,state:'charging',chargeTimer:0.4,customUpdate:(p,dt,e)=>{if(p.state==='charging'){if((p.chargeTimer-=dt)<=0)p.state='returning';}else{const o=e.balls.find(x=>x.uniqueId===p.ownerId);if(o){const rn=normalize(o.x-p.x,o.y-p.y);p.vx=rn.x*1600;p.vy=rn.y*1600;if(distance(p.x,p.y,o.x,o.y)<p.radius+o.radius){e.applyStatus(o.uniqueId,'shield',{duration:5}); sTxt(e,o.x,o.y-20,'🛡️ 護盾','#CBD5E1'); p.lifespan=0;}}else p.lifespan=0;}},onHit:p=>{if(p.state==='charging')p.state='returning';}}); } } if((b.steedTimer+=DT)>=4){ b.steedTimer=0; const t=eng.getNearestEnemy(b); if(t){ const n=normalize(t.x-b.x,t.y-b.y); eng.spawnProjectile({type:'steed',x:b.x,y:b.y,vx:n.x*600,vy:n.y*600,radius:18,color:'#F8FAFC',ownerId:b.uniqueId,damage:15,bounces:1,lifespan:2}); } } }
             }
           },
+          ling: { id:'ling', faction:'DivineCathedral', name:'靈', title:'心火 / 生命餘燼', color:'#FDBA74', mass:1.0, desc:'【被動】每對敵方造成10點傷害，生成一個恢復10點生命值的心火。心火自動追蹤隊友；若場上無隊友，直接治療自己。心火治療可超出最大生命值。',
+            initLogic: b => { b.heartfireDamage=0; b.scalingValue='心火進度: 0/10'; },
+            onDealDamage: (b, amt, target, eng) => {
+              if(amt<=0||!eng.isEnemy(target.uniqueId,b.uniqueId)) return;
+              b.heartfireDamage=(b.heartfireDamage||0)+amt;
+              while(b.heartfireDamage>=10){
+                b.heartfireDamage-=10;
+                const allies=eng.balls.filter(x=>x.team===b.team&&x.hp>0&&!x.isBlank&&x.uniqueId!==b.uniqueId);
+                if(allies.length===0){
+                  eng.applyHeal(b,10,b.uniqueId,true);
+                  sTxt(eng,b.x,b.y-30,'心火 +10','#FDBA74');
+                } else {
+                  const p={type:'heartfire',x:b.x,y:b.y,vx:(random()-.5)*80,vy:(random()-.5)*80,radius:10,color:'#FDBA74',ownerId:b.uniqueId,damage:0,bounces:0,lifespan:5,penetrating:true,customUpdate:(hf,dt,e)=>{
+                    const owner=e.balls.find(x=>x.uniqueId===hf.ownerId);
+                    const ts=e.balls.filter(x=>owner&&x.team===owner.team&&x.hp>0&&!x.isBlank&&x.uniqueId!==hf.ownerId);
+                    if(ts.length===0){ if(owner&&owner.hp>0)e.applyHeal(owner,10,hf.ownerId,true); hf.lifespan=0; return; }
+                    const t=ts.reduce((best,cur)=>cur.hp/cur.maxHp<best.hp/best.maxHp?cur:best,ts[0]);
+                    const n=normalize(t.x-hf.x,t.y-hf.y);
+                    hf.vx+=n.x*900*dt; hf.vy+=n.y*900*dt;
+                    const s=hypot(hf.vx,hf.vy), ms=420;
+                    if(s>ms){hf.vx=hf.vx/s*ms;hf.vy=hf.vy/s*ms;}
+                    if(distance(hf.x,hf.y,t.x,t.y)<hf.radius+t.radius){e.applyHeal(t,10,hf.ownerId,true);sTxt(e,t.x,t.y-30,'心火 +10','#FDBA74');hf.lifespan=0;}
+                  }};
+                  eng.spawnProjectile(p);
+                }
+              }
+              b.scalingValue=`心火進度: ${b.heartfireDamage.toFixed(1)}/10`;
+            },
+            update: b => { b.scalingValue=`心火進度: ${((b.heartfireDamage||0)).toFixed(1)}/10`; }
+          },
           kongmie: { id:'kongmie', faction:'DivineCathedral', name:'孔滅', title:'劇作家 / 三幕悲喜劇', color:'#8B5CF6', mass:1.0, desc:'【被動】死亡滿血復活進分支A，存活進分支B。【終幕】免疫彈道附帶聯覺。\n【聯動】三菱鏡。',
             initLogic: b => { b.act=1; b.path=null; b.actTimer=0; b.act3Threshold=60; b.checkedSynergy=false; b.scalingValue=`準備揭幕...`; }, onTakeDamage: (b, a, s, e, dt) => (b.act===3&&dt==='projectile')?0:a,
             update: (b, eng) => { if(!b.checkedSynergy){ b.act3Threshold=max(40,60-eng.balls.filter(x=>x.team===b.team&&x.uniqueId!==b.uniqueId&&ROSTER[x.copied||x.id]?.faction==='DivineCathedral').length*10); b.checkedSynergy=true; } if(b.act!==3&&(b.actTimer+=DT)>=b.act3Threshold){ b.act=3; sTxt(eng,b.x,b.y-40,'第三幕·過去的過去，未到的來到','#8B5CF6'); }
@@ -261,6 +291,83 @@ const ROSTER = {
                }
              }
           },
+          companion: { id:'companion', faction:'TomorrowCompany', name:'同行者', title:'軌道炮 / 渡魂機甲', color:'#67E8F9', mass:1.0, desc:'【被動】擁有三個軌道炮。每3秒各自索敵，向敵方發射持續1秒、逐漸向前延伸的激光，秒傷8。\n【變身】激光每造成20點傷害，變身渡魂機甲5秒：碰撞傷害、大小、質量翻倍，受到傷害與移動速度減半，獲得15點額外生命。\n【代價】渡魂機甲額外生命耗盡時，軌道炮癱瘓4秒。',
+            initLogic: b => { b.cannonAngle=0; b.cannonTimer=0; b.laserDamageBank=0; b.companionLasers=[]; b.mechTimer=0; b.mechBonusHp=0; b.cannonDisabledTimer=0; b.baseRadiusMult=b.radiusMult||1; b.baseMass=b.mass||1; b.baseSpeedMult=b.speedMult||1; b.scalingValue='軌道炮: 3.0s | 激光傷害: 0/20'; },
+            update: (b, eng) => {
+              b.cannonAngle+=2.4*DT;
+              if(b.cannonDisabledTimer>0)b.cannonDisabledTimer-=DT;
+              if(b.mechTimer>0){
+                b.mechTimer-=DT;
+                b.radius=BALL_RADIUS*(b.baseRadiusMult||1)*2;
+                b.mass=(b.baseMass||1)*2;
+                b.speedMult=(b.baseSpeedMult||1)*0.5;
+                if(b.mechTimer<=0){b.mechTimer=0;b.mechBonusHp=0;}
+              } else {
+                b.radius=BALL_RADIUS*(b.baseRadiusMult||1);
+                b.mass=b.baseMass||1;
+                b.speedMult=b.baseSpeedMult||1;
+              }
+              for(let i=b.companionLasers.length-1;i>=0;i--){
+                const l=b.companionLasers[i];
+                l.age+=DT;
+                const len=min(l.maxLen,l.maxLen*(l.age/1));
+                const ex=l.x+l.dx*len, ey=l.y+l.dy*len;
+                eng.spawnParticle({type:'laser',x:l.x,y:l.y,tx:ex,ty:ey,color:'#67E8F9',maxLifespan:0.08});
+                eng.balls.forEach(t=>{
+                  if(t.hp>0&&eng.isEnemy(t.uniqueId,b.uniqueId)&&!t.isBlank){
+                    const px=max(0,min(1,((t.x-l.x)*l.dx+(t.y-l.y)*l.dy)/len));
+                    const cx=l.x+l.dx*len*px, cy=l.y+l.dy*len*px;
+                    if(distance(t.x,t.y,cx,cy)<t.radius+8){
+                      const dealt=eng.applyDamage(t,8*DT,b.uniqueId,'laser');
+                      if(dealt>0){
+                        b.laserDamageBank+=dealt;
+                        if(b.laserDamageBank>=20&&b.mechTimer<=0&&b.cannonDisabledTimer<=0){
+                          b.laserDamageBank-=20;
+                          b.mechTimer=5;
+                          b.mechBonusHp=15;
+                          sTxt(eng,b.x,b.y-45,'渡魂機甲','#67E8F9',0,1.3);
+                        }
+                      }
+                    }
+                  }
+                });
+                if(l.age>=1)b.companionLasers.splice(i,1);
+              }
+              if(b.cannonDisabledTimer<=0&&(b.cannonTimer+=DT)>=3){
+                b.cannonTimer=0;
+                for(let i=0;i<3;i++){
+                  const a=b.cannonAngle+i*PI*2/3, ox=cos(a)*(b.radius+30), oy=sin(a)*(b.radius+30);
+                  let target=null,md=Infinity;
+                  eng.balls.forEach(t=>{if(t.hp>0&&eng.isEnemy(t.uniqueId,b.uniqueId)&&!t.isBlank){const d=distance(b.x+ox,b.y+oy,t.x,t.y);if(d<md){md=d;target=t;}}});
+                  let dir=target?normalize(target.x-(b.x+ox),target.y-(b.y+oy)):normalize(b.vx,b.vy);
+                  if(dir.x===0&&dir.y===0)dir={x:1,y:0};
+                  b.companionLasers.push({x:b.x+ox,y:b.y+oy,dx:dir.x,dy:dir.y,age:0,maxLen:eng.arenaSize*1.4});
+                }
+                eng.sound('laserBurst',{intensity:1.15});
+              }
+              const cd=b.cannonDisabledTimer>0?`癱瘓 ${b.cannonDisabledTimer.toFixed(1)}s`:`${(3-b.cannonTimer).toFixed(1)}s`;
+              b.scalingValue=b.mechTimer>0?`渡魂機甲 ${b.mechTimer.toFixed(1)}s | 額外生命: ${max(0,b.mechBonusHp).toFixed(1)}`:`軌道炮: ${cd} | 激光傷害: ${b.laserDamageBank.toFixed(1)}/20`;
+            },
+            modifyDamageOut: (b,d)=>b.mechTimer>0?d*2:d,
+            onTakeDamage: (b,a,src,eng,dType) => {
+              if(b.mechTimer>0){
+                let incoming=a*0.5;
+                if(b.mechBonusHp>0){
+                  const absorbed=min(b.mechBonusHp,incoming);
+                  b.mechBonusHp-=absorbed;
+                  incoming-=absorbed;
+                  if(b.mechBonusHp<=0){
+                    b.mechTimer=0;
+                    b.cannonDisabledTimer=4;
+                    b.companionLasers=[];
+                    sTxt(eng,b.x,b.y-40,'軌道炮癱瘓','#94A3B8',0,1.2);
+                  }
+                }
+                return incoming;
+              }
+              return a;
+            }
+          },
 
 
           fanatic_fan: { id:'fanatic_fan', faction:'TomorrowCompany', name:'狂熱粉絲', title:'公審', color:'#F43F5E', mass:0.8, radiusMult:0.5, desc:'公審目標', initLogic: b => b.speedMult=1.6, update: (b, e) => { let t=e.balls.find(x=>x.uniqueId===b.targetId&&x.hp>0&&!x.isBlank); if(!t){t=e.getNearestEnemy(b); if(t)b.targetId=t.uniqueId;} if(t){ const n=normalize(t.x-b.x,t.y-b.y); b.vx+=n.x*50; b.vy+=n.y*50; const s=hypot(b.vx,b.vy); if(s>450){b.vx=(b.vx/s)*450; b.vy=(b.vy/s)*450;} } else b.hp=0; }, modifyDamageOut: ()=>1, onCollide: ()=>{} },
@@ -311,11 +418,11 @@ const ROSTER = {
           },
           si: {
             id: 'si', faction: 'AnchorOfDestiny', name: '糸', title: '絲線 / 『繫』之錨', color: '#E2E8F0', mass: 1.0,
-            desc: '【性相】型之性相\n【被動】碰撞敵人時為其捆上絲線(可反覆疊加)。自身受傷時，將該次傷害的 8% 乘上絲線層數，傳遞給所有受捆綁的敵人，並免除同等比例的傷害。\n【主動】萬維交織：全場絲線總數量達12層時強制收束，每層對目標造成5點傷害，並將所有受捆綁的敵人強制拉向戰場中心，隨後清空絲線。',
+            desc: '【性相】型之性相\n【被動】碰撞敵人時為其捆上絲線(可反覆疊加)。自身受傷時，將該次傷害的 8% 乘上絲線層數，傳遞給所有受捆綁的敵人，並免除同等比例的傷害。\n【主動】萬維交織：全場絲線總數量達6層時強制收束，每層對目標造成5點傷害，並將所有受捆綁的敵人強制拉向戰場中心，隨後清空絲線。',
             initLogic: (ball) => { 
                 ball.boundOrder = []; // 用於記錄 舊敵人 -> 新敵人 的順序
                 ball.threadPulse = 0;
-                ball.scalingValue = `絲線總數: 0/12`; 
+                ball.scalingValue = `絲線總數: 0/6`; 
             },
             onCollide: (ball, other, relSpeed, engine) => {
                 if (engine.isEnemy(ball.uniqueId, other.uniqueId) && !other.isBlank) {
@@ -374,7 +481,7 @@ const ROSTER = {
                 });
 
                 // 萬維交織：收束絲線
-                if (totalThreads >= 12) {
+                if (totalThreads >= 6) {
                     engine.spawnParticle({ type: 'text', x: ball.x, y: ball.y - 40, text: '🕸️ 萬維交織！', color: '#E2E8F0', maxLifespan: 1.5 });
                     
                     const cx = engine.arenaSize / 2;
@@ -409,7 +516,7 @@ const ROSTER = {
                     totalThreads = 0;
                 }
                 
-                ball.scalingValue = `絲線總數: ${totalThreads}/12`;
+                ball.scalingValue = `絲線總數: ${totalThreads}/6`;
             }
           },
           dummy: { id:'dummy', faction:'Other', name:'巨大木樁', title:'測試用', color:'#8B4513', mass:15, radiusMult:3, desc:'無情靶子。', initLogic: b => { b.scalingValue=`木樁模式`; b.speedMult=0; }, modifyDamageOut: ()=>0 }
