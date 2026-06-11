@@ -164,6 +164,8 @@ const CharacterOptions = () => (
                   else if(o.type==='paint_puddle')engine.balls.forEach(b=>{if(b.hp>0&&!b.isBlank&&distance(b.x,b.y,o.x,o.y)<=o.radius+b.radius){const iE=engine.isEnemy(b.uniqueId,o.ownerId);if(o.paintType==='blue')engine.applyStatus(b.uniqueId,iE?'slow':'haste',{duration:0.2});else if(o.paintType==='yellow')engine.applyStatus(b.uniqueId,iE?'vulnerable':'shield_dr',{duration:0.2});else if(o.paintType==='green'){if(iE){b.vx+=(random()-.5)*1200*DT;b.vy+=(random()-.5)*1200*DT;}else engine.applyStatus(b.uniqueId,'regen_small',{duration:0.2});}}});
                   else if(o.type==='thought_core')engine.balls.forEach(b=>{if(b.hp>0&&!b.isBlank&&o.lifespan>0&&distance(b.x,b.y,o.x,o.y)<=o.radius+b.radius){const ow=engine.balls.find(x=>x.uniqueId===o.ownerId);if(ow&&!ow.isSlashing&&!ow.isGathering&&!ow.noGrowth){ow.collectedCores++;ow.scalingValue=`念核: ${ow.collectedCores}/12 | 受擊: ${ow.hitCount}`;} if(b.uniqueId!==o.ownerId){if(engine.isEnemy(b.uniqueId,o.ownerId))engine.applyDamage(b,5,o.ownerId,'magic');else engine.applyHeal(b,5);}o.lifespan=0;}});
                   else if(o.type==='inquiry_vortex' && o.lifespan>0){
+                    // 漩渦緩慢移動並減速
+                    if(o.vx||o.vy){ o.x+=(o.vx||0)*DT; o.y+=(o.vy||0)*DT; o.vx=(o.vx||0)*0.985; o.vy=(o.vy||0)*0.985; const ar=o.attractRadius||60; o.x=max(ar,min(engine.arenaSize-ar,o.x)); o.y=max(ar,min(engine.arenaSize-ar,o.y)); }
                     o.swirlAngle = (o.swirlAngle||0) + 3*DT;
                     if(!o.absorbed) o.absorbed = new Set();
                     o.radius = o.attractRadius;
@@ -174,10 +176,14 @@ const CharacterOptions = () => (
                       const d = distance(b.x,b.y,o.x,o.y);
                       if(d > o.attractRadius + b.radius) return;
                       const n = normalize(o.x-b.x, o.y-b.y);
-                      const pull = 500 * max(0.15, 1 - d/(o.attractRadius+b.radius));
+                      // 近中心時大幅增強吸力確保困住敵人
+                      const relD = max(0, d - b.radius) / o.attractRadius;
+                      const pull = relD < 0.25 ? 3200 : 1400 * max(0.2, 1 - relD);
                       b.vx += n.x*pull*DT; b.vy += n.y*pull*DT;
                       if(d <= o.centerRadius + b.radius){
                         engine.applyDamage(b, 3*DT, o.ownerId, 'magic');
+                        // 阻尼讓敵人困在中心
+                        b.vx *= 0.88; b.vy *= 0.88;
                         if(!o.absorbed.has(b.uniqueId)){ o.absorbed.add(b.uniqueId); extend(1,'+1s 敵'); }
                       }
                     });
@@ -187,7 +193,7 @@ const CharacterOptions = () => (
                       const d = distance(p.x,p.y,o.x,o.y);
                       if(d > o.attractRadius + (p.radius||4)) continue;
                       const n = normalize(o.x-p.x, o.y-p.y);
-                      const pull = 800 * max(0.2, 1 - d/(o.attractRadius+(p.radius||4)));
+                      const pull = 1200 * max(0.2, 1 - d/(o.attractRadius+(p.radius||4)));
                       p.vx += n.x*pull*DT; p.vy += n.y*pull*DT;
                       if(d <= o.centerRadius + (p.radius||4)){
                         extend(1,'+1s 衍');
