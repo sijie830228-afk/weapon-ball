@@ -519,5 +519,31 @@ const ROSTER = {
                 ball.scalingValue = `絲線總數: ${totalThreads}/6`;
             }
           },
+          daotuo: { id:'daotuo', faction:'AnchorOfDestiny', name:'稻陀', title:'命定之錨 / 『問』之錨', color:'#0EA5E9', mass:1.0,
+            desc:'【性相】問之性相\n【被動】每7秒發問一次，生成「引理」漩渦：吸引一定範圍內的敵人與其衍生物，中心範圍敵人每秒受3點傷害。\n【延長】吸收衍生物／敵人／場地掉落物(血包) → 存在時間 +1秒。\n【融合】漩渦間互相吸引並融合 → 範圍 +0.5直徑、存在時間 +3秒。\n【初始】漩渦持續5秒，吸引範圍3倍小球直徑(每次變大+0.5)，中心直徑1.5倍小球直徑。',
+            initLogic: b => { b.vortexTimer=0; b.scalingValue=`下個引理: 7.0s | 漩渦: 0`; },
+            update: (b, eng) => {
+              if((b.vortexTimer+=DT)>=7){
+                b.vortexTimer=0;
+                const ox=max(60,min(eng.arenaSize-60,b.x+(random()-.5)*100));
+                const oy=max(60,min(eng.arenaSize-60,b.y+(random()-.5)*100));
+                eng.spawnObstacle({
+                  type:'inquiry_vortex',
+                  x:ox, y:oy,
+                  attractRadius: BALL_RADIUS*2*3,
+                  centerRadius: BALL_RADIUS*1.5,
+                  radius: BALL_RADIUS*2*3,
+                  color:'#0EA5E9',
+                  ownerId:b.uniqueId, team:b.team,
+                  lifespan:5, maxLifespan:5,
+                  absorbed:new Set(),
+                  swirlAngle:0
+                });
+                sTxt(eng,b.x,b.y-30,'🌀 引理','#0EA5E9');
+              }
+              const myV = eng.obstacles.filter(o=>o.type==='inquiry_vortex'&&o.ownerId===b.uniqueId).length;
+              b.scalingValue = `下個引理: ${(7-b.vortexTimer).toFixed(1)}s | 漩渦: ${myV}`;
+            }
+          },
           dummy: { id:'dummy', faction:'Other', name:'巨大木樁', title:'測試用', color:'#8B4513', mass:15, radiusMult:3, desc:'無情靶子。', initLogic: b => { b.scalingValue=`木樁模式`; b.speedMult=0; }, modifyDamageOut: ()=>0 }
         };

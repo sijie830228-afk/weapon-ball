@@ -163,6 +163,65 @@ const CharacterOptions = () => (
                   else if(o.type==='gavel')engine.balls.forEach(b=>{if(b.hp>0&&!b.isBlank&&distance(b.x,b.y,o.x,o.y)<=o.radius+b.radius){engine.judgeId=b.uniqueId;engine.plaintiffTeam=b.team;o.lifespan=0;sTxt(engine,b.x,b.y-40,'⚖️ 法官就位！','#D6D3D1');}});
                   else if(o.type==='paint_puddle')engine.balls.forEach(b=>{if(b.hp>0&&!b.isBlank&&distance(b.x,b.y,o.x,o.y)<=o.radius+b.radius){const iE=engine.isEnemy(b.uniqueId,o.ownerId);if(o.paintType==='blue')engine.applyStatus(b.uniqueId,iE?'slow':'haste',{duration:0.2});else if(o.paintType==='yellow')engine.applyStatus(b.uniqueId,iE?'vulnerable':'shield_dr',{duration:0.2});else if(o.paintType==='green'){if(iE){b.vx+=(random()-.5)*1200*DT;b.vy+=(random()-.5)*1200*DT;}else engine.applyStatus(b.uniqueId,'regen_small',{duration:0.2});}}});
                   else if(o.type==='thought_core')engine.balls.forEach(b=>{if(b.hp>0&&!b.isBlank&&o.lifespan>0&&distance(b.x,b.y,o.x,o.y)<=o.radius+b.radius){const ow=engine.balls.find(x=>x.uniqueId===o.ownerId);if(ow&&!ow.isSlashing&&!ow.isGathering&&!ow.noGrowth){ow.collectedCores++;ow.scalingValue=`念核: ${ow.collectedCores}/12 | 受擊: ${ow.hitCount}`;} if(b.uniqueId!==o.ownerId){if(engine.isEnemy(b.uniqueId,o.ownerId))engine.applyDamage(b,5,o.ownerId,'magic');else engine.applyHeal(b,5);}o.lifespan=0;}});
+                  else if(o.type==='inquiry_vortex' && o.lifespan>0){
+                    o.swirlAngle = (o.swirlAngle||0) + 3*DT;
+                    if(!o.absorbed) o.absorbed = new Set();
+                    o.radius = o.attractRadius;
+                    const extend = (amt, label) => { o.lifespan+=amt; o.maxLifespan+=amt; engine.spawnParticle({type:'text',x:o.x,y:o.y-25,text:label,color:'#7DD3FC',maxLifespan:0.8}); };
+                    engine.balls.forEach(b=>{
+                      if(b.hp<=0||b.isBlank||b.isChessPiece||b.isUntargetable) return;
+                      if(!engine.isEnemy(b.uniqueId,o.ownerId)) return;
+                      const d = distance(b.x,b.y,o.x,o.y);
+                      if(d > o.attractRadius + b.radius) return;
+                      const n = normalize(o.x-b.x, o.y-b.y);
+                      const pull = 500 * max(0.15, 1 - d/(o.attractRadius+b.radius));
+                      b.vx += n.x*pull*DT; b.vy += n.y*pull*DT;
+                      if(d <= o.centerRadius + b.radius){
+                        engine.applyDamage(b, 3*DT, o.ownerId, 'magic');
+                        if(!o.absorbed.has(b.uniqueId)){ o.absorbed.add(b.uniqueId); extend(1,'+1s 敵'); }
+                      }
+                    });
+                    for(let pi=engine.projectiles.length-1; pi>=0; pi--){
+                      const p = engine.projectiles[pi];
+                      if(!engine.isEnemy(p.ownerId, o.ownerId)) continue;
+                      const d = distance(p.x,p.y,o.x,o.y);
+                      if(d > o.attractRadius + (p.radius||4)) continue;
+                      const n = normalize(o.x-p.x, o.y-p.y);
+                      const pull = 800 * max(0.2, 1 - d/(o.attractRadius+(p.radius||4)));
+                      p.vx += n.x*pull*DT; p.vy += n.y*pull*DT;
+                      if(d <= o.centerRadius + (p.radius||4)){
+                        extend(1,'+1s 衍');
+                        if(p.onDeath) p.onDeath(p, engine);
+                        engine.projectiles.splice(pi,1);
+                      }
+                    }
+                    engine.obstacles.forEach(other=>{
+                      if(other===o || other.lifespan<=0) return;
+                      if(other.type==='health_pack' && distance(o.x,o.y,other.x,other.y) <= o.centerRadius + other.radius){
+                        other.lifespan = 0;
+                        extend(1,'+1s 血包');
+                      } else if(other.type==='inquiry_vortex'){
+                        const d = distance(o.x,o.y,other.x,other.y);
+                        if(d > o.attractRadius + other.attractRadius) return;
+                        if(d > 1){
+                          const n = normalize(other.x-o.x, other.y-o.y);
+                          const sp = 70*DT;
+                          o.x += n.x*sp; o.y += n.y*sp;
+                          other.x -= n.x*sp; other.y -= n.y*sp;
+                        }
+                        if(d <= o.centerRadius + other.centerRadius){
+                          const bigger = o.attractRadius >= other.attractRadius ? o : other;
+                          const smaller = bigger===o ? other : o;
+                          bigger.attractRadius += BALL_RADIUS;
+                          bigger.radius = bigger.attractRadius;
+                          bigger.lifespan += 3; bigger.maxLifespan += 3;
+                          bigger.x = (o.x+other.x)/2; bigger.y = (o.y+other.y)/2;
+                          smaller.lifespan = 0;
+                          engine.spawnParticle({type:'text',x:bigger.x,y:bigger.y-35,text:'🌀 融合 +3s',color:'#0EA5E9',maxLifespan:1.2});
+                        }
+                      }
+                    });
+                  }
                   if(o.lifespan!==99999&&o.lifespan!==9999&&((o.lifespan-=DT)<=0)) engine.obstacles.splice(i,1);
                 }
 
@@ -239,6 +298,39 @@ const CharacterOptions = () => (
                 else if(o.type==='portal'){ctx.save();ctx.translate(o.x,o.y);ctx.rotate(eng.time*2);ctx.beginPath();ctx.arc(0,0,o.radius,0,PI*2);ctx.fillStyle='rgba(168,85,247,0.2)';ctx.fill();ctx.strokeStyle='#D8B4FE';ctx.lineWidth=2;ctx.setLineDash([8,8]);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.arc(0,0,o.radius*.6,0,PI*2);ctx.strokeStyle='#9333EA';ctx.lineWidth=3;ctx.stroke();ctx.restore();}
                 else if(o.type==='thought_core'){ctx.beginPath();ctx.arc(o.x,o.y,o.radius,0,PI*2);ctx.fillStyle='rgba(52,211,153,0.6)';ctx.fill();ctx.strokeStyle='#10B981';ctx.lineWidth=2;ctx.stroke();ctx.beginPath();ctx.arc(o.x,o.y,o.radius/2,0,PI*2);ctx.fillStyle='#FFF';ctx.fill();}
                 else if(o.type==='rgb_light'){ctx.save();ctx.translate(o.x,o.y);const wl=o.cType==='R'?0.25:(o.cType==='G'?0.4:0.6);const sp=o.cType==='R'?12:(o.cType==='G'?18:24);ctx.beginPath();for(let px=-o.radius;px<=o.radius;px+=2){const env=Math.exp(-(px*px)/(o.radius*o.radius*0.25));const py=Math.sin(px*wl-eng.time*sp)*o.radius*0.8*env;if(px===-o.radius)ctx.moveTo(px,py);else ctx.lineTo(px,py);}ctx.strokeStyle=o.color;ctx.lineWidth=4;ctx.shadowColor=o.color;ctx.shadowBlur=12;ctx.lineCap='round';ctx.stroke();ctx.globalAlpha=0.3;ctx.lineWidth=8;ctx.stroke();ctx.globalAlpha=1;ctx.shadowBlur=0;ctx.fillStyle='#FFF';ctx.font='bold 16px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(o.cType,0,-o.radius-8);ctx.restore();}
+                else if(o.type==='inquiry_vortex'){
+                  ctx.save(); ctx.translate(o.x,o.y);
+                  ctx.beginPath(); ctx.arc(0,0,o.attractRadius,0,PI*2);
+                  ctx.fillStyle='rgba(14,165,233,0.06)'; ctx.fill();
+                  ctx.strokeStyle='rgba(14,165,233,0.35)'; ctx.lineWidth=1.5;
+                  ctx.setLineDash([6,6]); ctx.stroke(); ctx.setLineDash([]);
+                  const pct = max(0, min(1, o.lifespan/(o.maxLifespan||5)));
+                  ctx.beginPath();
+                  ctx.arc(0,0,o.attractRadius-3, -PI/2, -PI/2 + PI*2*pct);
+                  ctx.strokeStyle='#0EA5E9'; ctx.lineWidth=4; ctx.lineCap='round';
+                  ctx.shadowColor='#0EA5E9'; ctx.shadowBlur=8; ctx.stroke();
+                  ctx.shadowBlur=0; ctx.lineCap='butt';
+                  ctx.rotate(o.swirlAngle||0);
+                  for(let i=0;i<3;i++){
+                    ctx.beginPath();
+                    const start = i*PI*2/3;
+                    for(let t=0;t<=PI*1.5;t+=0.12){
+                      const r = o.centerRadius + (o.attractRadius - o.centerRadius)*(t/(PI*1.5));
+                      const a = start + t;
+                      const px=cos(a)*r, py=sin(a)*r;
+                      if(t===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+                    }
+                    ctx.strokeStyle='rgba(56,189,248,0.45)'; ctx.lineWidth=2; ctx.stroke();
+                  }
+                  ctx.rotate(-(o.swirlAngle||0));
+                  ctx.beginPath(); ctx.arc(0,0,o.centerRadius,0,PI*2);
+                  ctx.fillStyle='rgba(14,165,233,0.35)'; ctx.fill();
+                  ctx.strokeStyle='#0EA5E9'; ctx.lineWidth=2; ctx.stroke();
+                  ctx.fillStyle='#FFF'; ctx.font='bold 16px sans-serif';
+                  ctx.textAlign='center'; ctx.textBaseline='middle';
+                  ctx.fillText('問', 0, 0);
+                  ctx.restore();
+                }
                 else if(o.type==='chess_piece'){ctx.beginPath();ctx.arc(o.x,o.y,o.radius,0,PI*2);ctx.fillStyle='rgba(229,231,235,0.2)';ctx.fill();ctx.strokeStyle=o.color;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=o.color;ctx.font='24px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText({'pawn':'♟','knight':'♞','bishop':'♝','rook':'♜','queen':'♛'}[o.pieceType]||'♟',o.x,o.y);}
               });
 
