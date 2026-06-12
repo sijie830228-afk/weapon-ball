@@ -170,30 +170,31 @@ const CharacterOptions = () => (
                     if(!o.absorbed) o.absorbed = new Set();
                     o.radius = o.attractRadius;
                     const extend = (amt, label) => { o.lifespan+=amt; o.maxLifespan+=amt; engine.spawnParticle({type:'text',x:o.x,y:o.y-25,text:label,color:'#7DD3FC',maxLifespan:0.8}); };
+                    // 吸引敵方球體
                     engine.balls.forEach(b=>{
                       if(b.hp<=0||b.isBlank||b.isChessPiece||b.isUntargetable) return;
                       if(!engine.isEnemy(b.uniqueId,o.ownerId)) return;
                       const d = distance(b.x,b.y,o.x,o.y);
                       if(d > o.attractRadius + b.radius) return;
                       const n = normalize(o.x-b.x, o.y-b.y);
-                      // 近中心時大幅增強吸力確保困住敵人
                       const relD = max(0, d - b.radius) / o.attractRadius;
                       const pull = relD < 0.25 ? 3200 : 1400 * max(0.2, 1 - relD);
                       b.vx += n.x*pull*DT; b.vy += n.y*pull*DT;
                       if(d <= o.centerRadius + b.radius){
                         engine.applyDamage(b, 3*DT, o.ownerId, 'magic');
-                        // 阻尼讓敵人困在中心
                         b.vx *= 0.88; b.vy *= 0.88;
+                        // absorbed Set 防止同一個敵人對同一個漩渦重複觸發 +1s
                         if(!o.absorbed.has(b.uniqueId)){ o.absorbed.add(b.uniqueId); extend(1,'+1s 敵'); }
                       }
                     });
+                    // 吸引敵方衍生物（子彈等 projectile）
                     for(let pi=engine.projectiles.length-1; pi>=0; pi--){
                       const p = engine.projectiles[pi];
                       if(!engine.isEnemy(p.ownerId, o.ownerId)) continue;
                       const d = distance(p.x,p.y,o.x,o.y);
                       if(d > o.attractRadius + (p.radius||4)) continue;
                       const n = normalize(o.x-p.x, o.y-p.y);
-                      const pull = 1200 * max(0.2, 1 - d/(o.attractRadius+(p.radius||4)));
+                      const pull = 1800 * max(0.25, 1 - d/(o.attractRadius+(p.radius||4)));
                       p.vx += n.x*pull*DT; p.vy += n.y*pull*DT;
                       if(d <= o.centerRadius + (p.radius||4)){
                         extend(1,'+1s 衍');
@@ -203,9 +204,13 @@ const CharacterOptions = () => (
                     }
                     engine.obstacles.forEach(other=>{
                       if(other===o || other.lifespan<=0) return;
-                      if(other.type==='health_pack' && distance(o.x,o.y,other.x,other.y) <= o.centerRadius + other.radius){
-                        other.lifespan = 0;
-                        extend(1,'+1s 血包');
+                      if(other.type==='health_pack'){
+                        // 血包在吸引範圍內則物理拉向漩渦，進入中心則吸收
+                        const hd = distance(o.x,o.y,other.x,other.y);
+                        if(hd <= o.attractRadius + other.radius){
+                          if(hd > 1){ const hn=normalize(o.x-other.x,o.y-other.y); other.x+=hn.x*90*DT; other.y+=hn.y*90*DT; }
+                          if(hd <= o.centerRadius + other.radius){ other.lifespan=0; extend(1,'+1s 血包'); }
+                        }
                       } else if(other.type==='inquiry_vortex'){
                         const d = distance(o.x,o.y,other.x,other.y);
                         if(d > o.attractRadius + other.attractRadius) return;
@@ -218,6 +223,8 @@ const CharacterOptions = () => (
                         if(d <= o.centerRadius + other.centerRadius){
                           const bigger = o.attractRadius >= other.attractRadius ? o : other;
                           const smaller = bigger===o ? other : o;
+                          // 融合時合併 absorbed 集合，防止敵人在新漩渦中心重複觸發 +1s
+                          if(smaller.absorbed) smaller.absorbed.forEach(id => bigger.absorbed.add(id));
                           bigger.attractRadius += BALL_RADIUS;
                           bigger.radius = bigger.attractRadius;
                           bigger.lifespan += 3; bigger.maxLifespan += 3;
