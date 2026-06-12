@@ -99,35 +99,35 @@ const ROSTER = {
               else if(hP>=0.25){ b.scalingValue=`卷三：騎士與駿馬`; if((b.knightTimer+=DT)>=5){ b.knightTimer=0; const t=eng.getNearestEnemy(b); if(t){ const n=normalize(t.x-b.x,t.y-b.y); eng.spawnProjectile({type:'knight',x:b.x,y:b.y,vx:n.x*1200,vy:n.y*1200,radius:14,color:'#CBD5E1',ownerId:b.uniqueId,damage:15,bounces:99,lifespan:8,penetrating:true,state:'charging',chargeTimer:0.4,customUpdate:(p,dt,e)=>{if(p.state==='charging'){if((p.chargeTimer-=dt)<=0)p.state='returning';}else{const o=e.balls.find(x=>x.uniqueId===p.ownerId);if(o){const rn=normalize(o.x-p.x,o.y-p.y);p.vx=rn.x*1600;p.vy=rn.y*1600;if(distance(p.x,p.y,o.x,o.y)<p.radius+o.radius){e.applyStatus(o.uniqueId,'shield',{duration:5}); sTxt(e,o.x,o.y-20,'🛡️ 護盾','#CBD5E1'); p.lifespan=0;}}else p.lifespan=0;}},onHit:p=>{if(p.state==='charging')p.state='returning';}}); } } if((b.steedTimer+=DT)>=4){ b.steedTimer=0; const t=eng.getNearestEnemy(b); if(t){ const n=normalize(t.x-b.x,t.y-b.y); eng.spawnProjectile({type:'steed',x:b.x,y:b.y,vx:n.x*600,vy:n.y*600,radius:18,color:'#F8FAFC',ownerId:b.uniqueId,damage:15,bounces:1,lifespan:2}); } } }
             }
           },
-          ling: { id:'ling', faction:'DivineCathedral', name:'靈', title:'心火 / 生命餘燼', color:'#FDBA74', mass:1.0, desc:'【性相】氳之性相\n【被動】每對敵方造成10點傷害，生成一個恢復10點生命值的心火。心火自動追蹤隊友；若場上無隊友，直接治療自己。心火治療可超出最大生命值。',
-            initLogic: b => { b.heartfireDamage=0; b.scalingValue='心火進度: 0/10'; },
-            onDealDamage: (b, amt, target, eng) => {
-              if(amt<=0||!eng.isEnemy(target.uniqueId,b.uniqueId)) return;
-              b.heartfireDamage=(b.heartfireDamage||0)+amt;
-              while(b.heartfireDamage>=10){
-                b.heartfireDamage-=10;
-                const allies=eng.balls.filter(x=>x.team===b.team&&x.hp>0&&!x.isBlank&&x.uniqueId!==b.uniqueId);
-                if(allies.length===0){
-                  eng.applyHeal(b,10,b.uniqueId,true);
-                  sTxt(eng,b.x,b.y-30,'心火 +10','#FDBA74');
-                } else {
-                  const p={type:'heartfire',x:b.x,y:b.y,vx:(random()-.5)*80,vy:(random()-.5)*80,radius:10,color:'#FDBA74',ownerId:b.uniqueId,damage:0,bounces:0,lifespan:5,penetrating:true,customUpdate:(hf,dt,e)=>{
-                    const owner=e.balls.find(x=>x.uniqueId===hf.ownerId);
-                    const ts=e.balls.filter(x=>owner&&x.team===owner.team&&x.hp>0&&!x.isBlank&&x.uniqueId!==hf.ownerId);
-                    if(ts.length===0){ if(owner&&owner.hp>0)e.applyHeal(owner,10,hf.ownerId,true); hf.lifespan=0; return; }
-                    const t=ts.reduce((best,cur)=>cur.hp/cur.maxHp<best.hp/best.maxHp?cur:best,ts[0]);
-                    const n=normalize(t.x-hf.x,t.y-hf.y);
-                    hf.vx+=n.x*900*dt; hf.vy+=n.y*900*dt;
-                    const s=hypot(hf.vx,hf.vy), ms=420;
-                    if(s>ms){hf.vx=hf.vx/s*ms;hf.vy=hf.vy/s*ms;}
-                    if(distance(hf.x,hf.y,t.x,t.y)<hf.radius+t.radius){e.applyHeal(t,10,hf.ownerId,true);sTxt(e,t.x,t.y-30,'心火 +10','#FDBA74');hf.lifespan=0;}
-                  }};
-                  eng.spawnProjectile(p);
+          ling: { id:'ling', faction:'DivineCathedral', name:'靈', title:'心火 / 生命餘燼', color:'#FDBA74', mass:1.0, desc:'【性相】氳之性相\n【被動】每秒汲取最近敵人一點生命值，汲取達十點時回復十點生命並向外擴散圓環，掃到敵人損失三點生命，隊友恢復三點。',
+            initLogic: b => { b.siphonedHp=0; b.siphonTimer=0; b.scalingValue='心火進度: 0/10'; },
+            update: (b, eng) => {
+              if ((b.siphonTimer += DT) >= 1) {
+                b.siphonTimer = 0;
+                const t = eng.getNearestEnemy(b);
+                if (t) {
+                  eng.applyDamage(t, 1, b.uniqueId, 'magic');
+                  b.siphonedHp += 1;
+                  sTxt(eng, t.x, t.y-20, '汲取', '#FDBA74');
                 }
               }
-              b.scalingValue=`心火進度: ${b.heartfireDamage.toFixed(1)}/10`;
-            },
-            update: b => { b.scalingValue=`心火進度: ${((b.heartfireDamage||0)).toFixed(1)}/10`; }
+              if (b.siphonedHp >= 10) {
+                b.siphonedHp -= 10;
+                eng.applyHeal(b, 10, b.uniqueId, true);
+                sTxt(eng, b.x, b.y-30, '心火爆發', '#FDBA74');
+                eng.spawnWave({
+                  x: b.x, y: b.y, startRadius: 0, maxRadius: 200, speed: 600, color: 'rgba(253,186,116,0.5)', ownerId: b.uniqueId, lingerDuration: 0.2,
+                  onHit: tg => {
+                    if (eng.isEnemy(tg.uniqueId, b.uniqueId)) {
+                      eng.applyDamage(tg, 3, b.uniqueId, 'magic');
+                    } else {
+                      eng.applyHeal(tg, 3, b.uniqueId, true);
+                    }
+                  }
+                });
+              }
+              b.scalingValue=`心火進度: ${floor(b.siphonedHp)}/10`;
+            }
           },
           kongmie: { id:'kongmie', faction:'DivineCathedral', name:'孔滅', title:'劇作家 / 三幕悲喜劇', color:'#8B5CF6', mass:1.0, desc:'【性相】境之性相\n【被動】死亡滿血復活進分支A，存活進分支B。【終幕】免疫彈道附帶聯覺。\n【聯動】三菱鏡。',
             initLogic: b => { b.act=1; b.path=null; b.actTimer=0; b.act3Threshold=60; b.checkedSynergy=false; b.scalingValue=`準備揭幕...`; }, onTakeDamage: (b, a, s, e, dt) => (b.act===3&&dt==='projectile')?0:a,
@@ -333,17 +333,34 @@ const ROSTER = {
                 });
                 if(l.age>=1)b.companionLasers.splice(i,1);
               }
-              if(b.cannonDisabledTimer<=0&&(b.cannonTimer+=DT)>=3){
-                b.cannonTimer=0;
-                for(let i=0;i<3;i++){
-                  const a=b.cannonAngle+i*PI*2/3, ox=cos(a)*(b.radius+30), oy=sin(a)*(b.radius+30);
-                  let target=null,md=Infinity;
-                  eng.balls.forEach(t=>{if(t.hp>0&&eng.isEnemy(t.uniqueId,b.uniqueId)&&!t.isBlank){const d=distance(b.x+ox,b.y+oy,t.x,t.y);if(d<md){md=d;target=t;}}});
-                  let dir=target?normalize(target.x-(b.x+ox),target.y-(b.y+oy)):normalize(b.vx,b.vy);
-                  if(dir.x===0&&dir.y===0)dir={x:1,y:0};
-                  b.companionLasers.push({x:b.x+ox,y:b.y+oy,dx:dir.x,dy:dir.y,age:0,maxLen:eng.arenaSize*1.4});
+              if(b.cannonDisabledTimer<=0){
+                if(b.mechTimer>0){
+                  if((b.cannonTimer+=DT)>=1){
+                    b.cannonTimer=0;
+                    const i=(b.mechCannonIndex||0)%3;
+                    b.mechCannonIndex=(b.mechCannonIndex||0)+1;
+                    const a=b.cannonAngle+i*PI*2/3, ox=cos(a)*(b.radius+30), oy=sin(a)*(b.radius+30);
+                    let target=null,md=Infinity;
+                    eng.balls.forEach(t=>{if(t.hp>0&&eng.isEnemy(t.uniqueId,b.uniqueId)&&!t.isBlank){const d=distance(b.x+ox,b.y+oy,t.x,t.y);if(d<md){md=d;target=t;}}});
+                    let dir=target?normalize(target.x-(b.x+ox),target.y-(b.y+oy)):normalize(b.vx,b.vy);
+                    if(dir.x===0&&dir.y===0)dir={x:1,y:0};
+                    b.companionLasers.push({x:b.x+ox,y:b.y+oy,dx:dir.x,dy:dir.y,age:0,maxLen:eng.arenaSize*1.4});
+                    eng.sound('laserBurst',{intensity:1.15});
+                  }
+                }else{
+                  if((b.cannonTimer+=DT)>=3){
+                    b.cannonTimer=0;
+                    for(let i=0;i<3;i++){
+                      const a=b.cannonAngle+i*PI*2/3, ox=cos(a)*(b.radius+30), oy=sin(a)*(b.radius+30);
+                      let target=null,md=Infinity;
+                      eng.balls.forEach(t=>{if(t.hp>0&&eng.isEnemy(t.uniqueId,b.uniqueId)&&!t.isBlank){const d=distance(b.x+ox,b.y+oy,t.x,t.y);if(d<md){md=d;target=t;}}});
+                      let dir=target?normalize(target.x-(b.x+ox),target.y-(b.y+oy)):normalize(b.vx,b.vy);
+                      if(dir.x===0&&dir.y===0)dir={x:1,y:0};
+                      b.companionLasers.push({x:b.x+ox,y:b.y+oy,dx:dir.x,dy:dir.y,age:0,maxLen:eng.arenaSize*1.4});
+                    }
+                    eng.sound('laserBurst',{intensity:1.15});
+                  }
                 }
-                eng.sound('laserBurst',{intensity:1.15});
               }
               const cd=b.cannonDisabledTimer>0?`癱瘓 ${b.cannonDisabledTimer.toFixed(1)}s`:`${(3-b.cannonTimer).toFixed(1)}s`;
               b.scalingValue=b.mechTimer>0?`渡魂機甲 ${b.mechTimer.toFixed(1)}s | 額外生命: ${max(0,b.mechBonusHp).toFixed(1)}`:`軌道炮: ${cd} | 激光傷害: ${b.laserDamageBank.toFixed(1)}/20`;
@@ -418,11 +435,11 @@ const ROSTER = {
           },
           si: {
             id: 'si', faction: 'AnchorOfDestiny', name: '糸', title: '絲線 / 『繫』之錨', color: '#E2E8F0', mass: 1.0,
-            desc: '【性相】型之性相\n【被動】碰撞敵人時為其捆上絲線(可反覆疊加)。自身受傷時，將該次傷害的 8% 乘上絲線層數，傳遞給所有受捆綁的敵人，並免除同等比例的傷害。\n【主動】萬維交織：全場絲線總數量達6層時強制收束，每層對目標造成5點傷害，並將所有受捆綁的敵人強制拉向戰場中心，隨後清空絲線。',
+            desc: '【性相】型之性相\n【被動】碰撞敵人時為其捆上絲線(可反覆疊加)。自身受傷時，將該次傷害的 8% 乘上絲線層數，傳遞給所有受捆綁的敵人，並免除同等比例的傷害。\n【主動】萬維交織：全場絲線總數量達12層時強制收束，每層對目標造成5點傷害，並將所有受捆綁的敵人強制拉向戰場中心，隨後清空絲線。',
             initLogic: (ball) => { 
                 ball.boundOrder = []; // 用於記錄 舊敵人 -> 新敵人 的順序
                 ball.threadPulse = 0;
-                ball.scalingValue = `絲線總數: 0/6`; 
+                ball.scalingValue = `絲線總數: 0/12`; 
             },
             onCollide: (ball, other, relSpeed, engine) => {
                 if (engine.isEnemy(ball.uniqueId, other.uniqueId) && !other.isBlank) {
@@ -481,7 +498,7 @@ const ROSTER = {
                 });
 
                 // 萬維交織：收束絲線
-                if (totalThreads >= 6) {
+                if (totalThreads >= 12) {
                     engine.spawnParticle({ type: 'text', x: ball.x, y: ball.y - 40, text: '🕸️ 萬維交織！', color: '#E2E8F0', maxLifespan: 1.5 });
                     
                     const cx = engine.arenaSize / 2;
@@ -520,7 +537,7 @@ const ROSTER = {
             }
           },
           daotuo: { id:'daotuo', faction:'AnchorOfDestiny', name:'稻陀', title:'命定之錨 / 『問』之錨', color:'#0EA5E9', mass:1.0,
-            desc:'【性相】境之性相\n【被動】每7秒發問一次，生成「引理」漩渦：吸引一定範圍內的敵人與其衍生物，中心範圍敵人每秒受3點傷害。\n【延長】吸收衍生物／敵人／場地掉落物(血包) → 存在時間 +1秒。\n【融合】漩渦間互相吸引並融合 → 範圍 +0.5直徑、存在時間 +3秒。\n【初始】漩渦持續5秒，吸引範圍3倍小球直徑(每次變大+0.5)，中心直徑1.5倍小球直徑。',
+            desc:'【性相】境之性相\n【被動】每7秒發問一次，生成「引理」漩渦：吸引一定範圍內的敵人與其衍生物，中心範圍敵人每秒受3點傷害。稻陀不會與被困在漩渦內的敵人相撞。\n【延長】吸收衍生物／敵人／場地掉落物(血包) → 存在時間 +1秒。\n【融合】漩渦間互相吸引並融合 → 範圍 +0.5直徑、存在時間 +3秒。\n【初始】漩渦持續5秒，吸引範圍3倍小球直徑(每次變大+0.5)，中心直徑1.5倍小球直徑。',
             initLogic: b => { b.vortexTimer=0; b.scalingValue=`下個引理: 7.0s | 漩渦: 0`; },
             update: (b, eng) => {
               if((b.vortexTimer+=DT)>=7){
