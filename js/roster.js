@@ -566,5 +566,108 @@ const ROSTER = {
               b.scalingValue = `下個引理: ${(7-b.vortexTimer).toFixed(1)}s | 漩渦: ${myV}`;
             }
           },
+          n: { id:'n', faction:'AnchorOfDestiny', name:'N', title:'推理 / 『理』之錨', color:'#D946EF', mass:1.0, 
+            desc:'【性相】理之性相\n【被動】每3秒發射飛鏢。命中敵人時N傳送至飛鏢處；命中牆壁則留下「線索」。\n【主動】場上線索達8個時開始「驗算」：受傷減半、碰撞傷害三倍，從最後一個線索快速逆向移動至第一個線索。\n【得證】驗算完成獲得5秒「得證」：與所有線索連線，觸碰連線的敵人每秒受到(線索步數×5)的傷害，結束後收回線索。',
+            initLogic: b => { b.clues = []; b.dartTimer = 0; b.scalingValue = '線索: 0/8'; },
+            modifyDamageOut: (b, d) => b.isVerifying ? d * 3 : d,
+            onTakeDamage: (b, a, s, e) => b.isVerifying ? a * 0.5 : a,
+            update: (b, eng) => {
+                if (b.isVerifying) {
+                    b.scalingValue = `驗算中...`;
+                    const targetClue = b.clues[b.verificationIndex - 1];
+                    if (!targetClue) {
+                        b.isVerifying = false;
+                        b.provenTimer = 5;
+                        sTxt(eng, b.x, b.y-40, '得證！', '#D946EF');
+                    } else {
+                        const dx = targetClue.x - b.x, dy = targetClue.y - b.y, dist = hypot(dx, dy);
+                        const speed = 2500 * DT;
+                        if (dist <= speed) {
+                            b.x = targetClue.x; b.y = targetClue.y;
+                            b.verificationIndex--;
+                            if(b.verificationIndex > 0) sTxt(eng, b.x, b.y-20, `驗算 ${b.verificationIndex}`, '#A855F7');
+                        } else {
+                            b.x += (dx/dist)*speed;
+                            b.y += (dy/dist)*speed;
+                        }
+                    }
+                    return;
+                }
+                
+                if ((b.provenTimer || 0) > 0) {
+                    b.provenTimer -= DT;
+                    b.scalingValue = `得證！ (${b.provenTimer.toFixed(1)}s)`;
+                    b.clues.forEach(c => {
+                        eng.spawnParticle({type:'laser', x:b.x, y:b.y, tx:c.x, ty:c.y, color:'#D946EF', maxLifespan:0.1});
+                        eng.balls.forEach(tg => {
+                            if (tg.hp > 0 && eng.isEnemy(tg.uniqueId, b.uniqueId) && !tg.isBlank) {
+                                const l2 = Math.pow(c.x - b.x, 2) + Math.pow(c.y - b.y, 2);
+                                let dist;
+                                if (l2 === 0) dist = distance(tg.x, tg.y, b.x, b.y);
+                                else {
+                                    let t = ((tg.x - b.x) * (c.x - b.x) + (tg.y - b.y) * (c.y - b.y)) / l2;
+                                    t = max(0, min(1, t));
+                                    dist = distance(tg.x, tg.y, b.x + t * (c.x - b.x), b.y + t * (c.y - b.y));
+                                }
+                                if (dist <= tg.radius + 5) {
+                                    eng.applyDamage(tg, c.stepNumber * DT * 5, b.uniqueId, 'magic');
+                                }
+                            }
+                        });
+                    });
+                    
+                    if (b.provenTimer <= 0) {
+                        b.clues = [];
+                        eng.obstacles = eng.obstacles.filter(o => !(o.type === 'n_clue' && o.ownerId === b.uniqueId));
+                        sTxt(eng, b.x, b.y-30, '線索回收', '#A855F7');
+                    }
+                    return;
+                }
+                
+                b.scalingValue = `線索: ${b.clues.length}/8 | 飛鏢: ${max(0, 3-b.dartTimer).toFixed(1)}s`;
+                if (b.clues.length >= 8) {
+                    b.isVerifying = true;
+                    b.verificationIndex = b.clues.length - 1;
+                    b.x = b.clues[b.verificationIndex].x;
+                    b.y = b.clues[b.verificationIndex].y;
+                    sTxt(eng, b.x, b.y-30, '開始驗算', '#D946EF', 0, 1.5);
+                    return;
+                }
+                
+                if ((b.dartTimer += DT) >= 3) {
+                    b.dartTimer = 0;
+                    const t = eng.getNearestEnemy(b);
+                    const n = t ? normalize(t.x-b.x, t.y-b.y) : normalize(b.vx, b.vy);
+                    eng.spawnProjectile({
+                        type: 'n_dart', x: b.x, y: b.y, vx: n.x*1000, vy: n.y*1000, radius: 8, color: '#D946EF',
+                        ownerId: b.uniqueId, damage: 15, bounces: 0, lifespan: 5,
+                        onHit: (p, tg, e) => {
+                            p.hitEnemy = true;
+                            const owner = e.balls.find(x => x.uniqueId === p.ownerId);
+                            if (owner && !owner.isVerifying && (owner.provenTimer||0)<=0) {
+                                owner.x = tg.x; owner.y = tg.y;
+                                e.spawnParticle({type:'rect_flash', x:tg.x, y:tg.y, size:50, color:'#D946EF', maxLifespan:0.3});
+                                sTxt(e, owner.x, owner.y-30, '傳送', '#D946EF');
+                            }
+                        },
+                        onDeath: (p, e) => {
+                            if (p.hitEnemy) return;
+                            const as = e.arenaSize;
+                            if (p.x <= p.radius + 1 || p.x >= as - p.radius - 1 || p.y <= p.radius + 1 || p.y >= as - p.radius - 1) {
+                                const owner = e.balls.find(x => x.uniqueId === p.ownerId);
+                                if (owner && owner.clues && owner.clues.length < 8) {
+                                    const px = max(15, min(as-15, p.x));
+                                    const py = max(15, min(as-15, p.y));
+                                    const step = owner.clues.length + 1;
+                                    owner.clues.push({x: px, y: py, stepNumber: step});
+                                    e.spawnObstacle({type:'n_clue', x:px, y:py, radius:12, color:'rgba(217,70,239,0.4)', ownerId: owner.uniqueId, lifespan: 9999, stepNumber: step});
+                                    sTxt(e, px, py-20, `線索 ${step}`, '#D946EF');
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+          },
           dummy: { id:'dummy', faction:'Other', name:'巨大木樁', title:'測試用', color:'#8B4513', mass:15, radiusMult:3, desc:'無情靶子。', initLogic: b => { b.scalingValue=`木樁模式`; b.speedMult=0; }, modifyDamageOut: ()=>0 }
         };
