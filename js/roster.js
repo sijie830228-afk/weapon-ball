@@ -99,24 +99,25 @@ const ROSTER = {
               else if(hP>=0.25){ b.scalingValue=`卷三：騎士與駿馬`; if((b.knightTimer+=DT)>=5){ b.knightTimer=0; const t=eng.getNearestEnemy(b); if(t){ const n=normalize(t.x-b.x,t.y-b.y); eng.spawnProjectile({type:'knight',x:b.x,y:b.y,vx:n.x*1200,vy:n.y*1200,radius:14,color:'#CBD5E1',ownerId:b.uniqueId,damage:15,bounces:99,lifespan:8,penetrating:true,state:'charging',chargeTimer:0.4,customUpdate:(p,dt,e)=>{if(p.state==='charging'){if((p.chargeTimer-=dt)<=0)p.state='returning';}else{const o=e.balls.find(x=>x.uniqueId===p.ownerId);if(o){const rn=normalize(o.x-p.x,o.y-p.y);p.vx=rn.x*1600;p.vy=rn.y*1600;if(distance(p.x,p.y,o.x,o.y)<p.radius+o.radius){e.applyStatus(o.uniqueId,'shield',{duration:5}); sTxt(e,o.x,o.y-20,'🛡️ 護盾','#CBD5E1'); p.lifespan=0;}}else p.lifespan=0;}},onHit:p=>{if(p.state==='charging')p.state='returning';}}); } } if((b.steedTimer+=DT)>=4){ b.steedTimer=0; const t=eng.getNearestEnemy(b); if(t){ const n=normalize(t.x-b.x,t.y-b.y); eng.spawnProjectile({type:'steed',x:b.x,y:b.y,vx:n.x*600,vy:n.y*600,radius:18,color:'#F8FAFC',ownerId:b.uniqueId,damage:15,bounces:1,lifespan:2}); } } }
             }
           },
-          ling: { id:'ling', faction:'DivineCathedral', name:'靈', title:'心火 / 生命餘燼', color:'#FDBA74', mass:1.0, desc:'【性相】氳之性相\n【被動】每秒汲取最近敵人一點生命值，汲取達十點時回復十點生命並向外擴散圓環，掃到敵人損失三點生命，隊友恢復三點。',
+          ling: { id:'ling', faction:'DivineCathedral', name:'靈', title:'心火 / 生命餘燼', color:'#FDBA74', mass:1.0, desc:'【性相】氳之性相\n【被動】每秒向最近敵人汲取2點生命並為自身恢復1點，汲取達10點時向外擴散極緩慢全場圓環，掃到敵人損失3點生命，隊友恢復3點。',
             initLogic: b => { b.siphonedHp=0; b.siphonTimer=0; b.scalingValue='心火進度: 0/10'; },
             update: (b, eng) => {
               if ((b.siphonTimer += DT) >= 1) {
                 b.siphonTimer = 0;
                 const t = eng.getNearestEnemy(b);
                 if (t) {
-                  eng.applyDamage(t, 1, b.uniqueId, 'magic');
-                  b.siphonedHp += 1;
+                  eng.applyDamage(t, 2, b.uniqueId, 'magic');
+                  eng.applyHeal(b, 1, b.uniqueId, true);
+                  b.siphonedHp += 2;
                   sTxt(eng, t.x, t.y-20, '汲取', '#FDBA74');
+                  eng.spawnParticle({type:'laser', x:b.x, y:b.y, tx:t.x, ty:t.y, color:'#FDBA74', maxLifespan:0.3});
                 }
               }
               if (b.siphonedHp >= 10) {
                 b.siphonedHp -= 10;
-                eng.applyHeal(b, 10, b.uniqueId, true);
                 sTxt(eng, b.x, b.y-30, '心火爆發', '#FDBA74');
                 eng.spawnWave({
-                  x: b.x, y: b.y, startRadius: 0, maxRadius: 200, speed: 600, color: 'rgba(253,186,116,0.5)', ownerId: b.uniqueId, lingerDuration: 0.2,
+                  x: b.x, y: b.y, startRadius: 0, maxRadius: eng.arenaSize * 1.5, speed: 100, color: 'rgba(253,186,116,0.5)', ownerId: b.uniqueId, lingerDuration: 0.2,
                   onHit: tg => {
                     if (eng.isEnemy(tg.uniqueId, b.uniqueId)) {
                       eng.applyDamage(tg, 3, b.uniqueId, 'magic');
@@ -533,7 +534,7 @@ const ROSTER = {
                     totalThreads = 0;
                 }
                 
-                ball.scalingValue = `絲線總數: ${totalThreads}/6`;
+                ball.scalingValue = `絲線總數: ${totalThreads}/12`;
             }
           },
           daotuo: { id:'daotuo', faction:'AnchorOfDestiny', name:'稻陀', title:'命定之錨 / 『問』之錨', color:'#0EA5E9', mass:1.0,
