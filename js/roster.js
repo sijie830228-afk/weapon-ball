@@ -567,7 +567,7 @@ const ROSTER = {
             }
           },
           n: { id:'n', faction:'AnchorOfDestiny', name:'N', title:'推理 / 『理』之錨', color:'#D946EF', mass:1.0, 
-            desc:'【性相】理之性相\n【被動】每3秒發射飛鏢。命中敵人時N傳送至飛鏢處；命中牆壁則留下「線索」。\n【主動】場上線索達8個時開始「驗算」：受傷減半、碰撞傷害三倍，從最後一個線索快速逆向移動至第一個線索。\n【得證】驗算完成獲得5秒「得證」：與所有線索連線，觸碰連線的敵人每秒受到(線索步數×5)的傷害，結束後收回線索。',
+            desc:'【性相】型之性相\n【被動】每3秒發射飛鏢。命中敵人時N傳送至飛鏢處；命中牆壁則留下「線索」。\n【主動】場上線索達8個時開始「驗算」：受傷減半、碰撞傷害三倍，從最後一個線索快速逆向移動至第一個線索。\n【得證】驗算完成獲得5秒「得證」：與所有線索連線，觸碰連線的敵人每秒受到(線索步數×5)的傷害，結束後收回線索。',
             initLogic: b => { b.clues = []; b.dartTimer = 0; b.scalingValue = '線索: 0/8'; },
             modifyDamageOut: (b, d) => b.isVerifying ? d * 3 : d,
             onTakeDamage: (b, a, s, e) => b.isVerifying ? a * 0.5 : a,
@@ -638,33 +638,37 @@ const ROSTER = {
                     b.dartTimer = 0;
                     const t = eng.getNearestEnemy(b);
                     const n = t ? normalize(t.x-b.x, t.y-b.y) : normalize(b.vx, b.vy);
-                    eng.spawnProjectile({
-                        type: 'n_dart', x: b.x, y: b.y, vx: n.x*1000, vy: n.y*1000, radius: 8, color: '#D946EF',
-                        ownerId: b.uniqueId, damage: 15, bounces: 0, lifespan: 5,
-                        onHit: (p, tg, e) => {
-                            p.hitEnemy = true;
-                            const owner = e.balls.find(x => x.uniqueId === p.ownerId);
-                            if (owner && !owner.isVerifying && (owner.provenTimer||0)<=0) {
-                                owner.x = tg.x; owner.y = tg.y;
-                                e.spawnParticle({type:'rect_flash', x:tg.x, y:tg.y, size:50, color:'#D946EF', maxLifespan:0.3});
-                                sTxt(e, owner.x, owner.y-30, '傳送', '#D946EF');
-                            }
-                        },
-                        onDeath: (p, e) => {
-                            if (p.hitEnemy) return;
-                            const as = e.arenaSize;
-                            if (p.x <= p.radius + 1 || p.x >= as - p.radius - 1 || p.y <= p.radius + 1 || p.y >= as - p.radius - 1) {
+                    const baseAngle = atan2(n.y, n.x);
+                    [-PI/12, 0, PI/12].forEach(offset => {
+                        const a = baseAngle + offset;
+                        eng.spawnProjectile({
+                            type: 'n_dart', x: b.x, y: b.y, vx: cos(a)*1000, vy: sin(a)*1000, radius: 8, color: '#D946EF',
+                            ownerId: b.uniqueId, damage: 15, bounces: 0, lifespan: 5,
+                            onHit: (p, tg, e) => {
+                                p.hitEnemy = true;
                                 const owner = e.balls.find(x => x.uniqueId === p.ownerId);
-                                if (owner && owner.clues && owner.clues.length < 8) {
-                                    const px = max(15, min(as-15, p.x));
-                                    const py = max(15, min(as-15, p.y));
-                                    const step = owner.clues.length + 1;
-                                    owner.clues.push({x: px, y: py, stepNumber: step});
-                                    e.spawnObstacle({type:'n_clue', x:px, y:py, radius:12, color:'rgba(217,70,239,0.4)', ownerId: owner.uniqueId, lifespan: 9999, stepNumber: step});
-                                    sTxt(e, px, py-20, `線索 ${step}`, '#D946EF');
+                                if (owner && !owner.isVerifying && (owner.provenTimer||0)<=0) {
+                                    owner.x = tg.x; owner.y = tg.y;
+                                    e.spawnParticle({type:'rect_flash', x:tg.x, y:tg.y, size:50, color:'#D946EF', maxLifespan:0.3});
+                                    sTxt(e, owner.x, owner.y-30, '傳送', '#D946EF');
+                                }
+                            },
+                            onDeath: (p, e) => {
+                                if (p.hitEnemy) return;
+                                const as = e.arenaSize;
+                                if (p.x <= p.radius + 1 || p.x >= as - p.radius - 1 || p.y <= p.radius + 1 || p.y >= as - p.radius - 1) {
+                                    const owner = e.balls.find(x => x.uniqueId === p.ownerId);
+                                    if (owner && owner.clues && owner.clues.length < 8) {
+                                        const px = max(15, min(as-15, p.x));
+                                        const py = max(15, min(as-15, p.y));
+                                        const step = owner.clues.length + 1;
+                                        owner.clues.push({x: px, y: py, stepNumber: step});
+                                        e.spawnObstacle({type:'n_clue', x:px, y:py, radius:12, color:'rgba(217,70,239,0.4)', ownerId: owner.uniqueId, lifespan: 9999, stepNumber: step});
+                                        sTxt(e, px, py-20, `線索 ${step}`, '#D946EF');
+                                    }
                                 }
                             }
-                        }
+                        });
                     });
                 }
             }
