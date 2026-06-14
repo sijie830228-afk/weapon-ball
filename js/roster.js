@@ -695,9 +695,16 @@ const ROSTER = {
                   b.chargeTimer += 1;
                   sTxt(eng, b.x, b.y - 35, '蓄力 +1s', '#A78BFA');
                 }
+                // 蓄力期間遭致命傷害：立即切換治癒模式，不可被淘汰
+                if (a >= b.hp) {
+                  b.isCharging = false;
+                  b.healingMode = true;
+                  b.ncTimer = 0;
+                  sTxt(eng, b.x, b.y - 50, '蓄力終焉→治癒轉化', '#A78BFA', 0, 2);
+                  return b.hp - 0.1;
+                }
               }
               if (b.healingMode) {
-                // 受到傷害時轉為治療，可超過生命值上限
                 eng.applyHeal(b, a, b.uniqueId, true);
                 return 0;
               }
@@ -774,43 +781,39 @@ const ROSTER = {
               if ((b.constantTimer += DT) >= 15) {
                 b.constantTimer = 0;
                 const remaining = CONSTANTS.filter(c => !b.usedConstants.includes(c));
-                if (remaining.length === 0) {
-                  // 四個都用完，進入蓄力
-                  b.isCharging = true;
-                  b.chargeTimer = 10;
-                  b.chargeDamageAccum = 0;
-                  sTxt(eng, b.x, b.y - 50, '【蓄力】開始！', '#A78BFA', 0, 2);
-                  return;
-                }
+                if (remaining.length === 0) return; // 所有常數已用完，蓄力中
                 const chosen = remaining[floor(random() * remaining.length)];
                 b.usedConstants.push(chosen);
                 sTxt(eng, eng.arenaSize / 2, eng.arenaSize / 2 - 40, NAMES[chosen], '#A78BFA', 0, 1.8);
 
                 if (chosen === 'charge') {
-                  // 基本電荷：碰撞消失5秒
                   eng.chargeActive = (eng.chargeActive || 0) + 5;
                   eng.spawnParticle({ type: 'text', x: eng.arenaSize/2, y: eng.arenaSize/2, text: '⚡ 碰撞消失！', color: '#FCD34D', maxLifespan: 2 });
                   eng.balls.forEach(t => { if(t.hp>0&&!t.isBlank) sTxt(eng, t.x, t.y-20, '無碰撞', '#FCD34D'); });
                 } else if (chosen === 'lightspeed') {
-                  // 光速：螢幕閃黑 + 所有計時器提前5秒
                   eng.lightspeedFlash = 0.5;
                   eng.balls.forEach(t => {
                     if (t.hp <= 0 || t.isBlank) return;
-                    // 對所有角色的常見計時器提前5秒（增加計時值讓它們更快觸發）
-                    const timerKeys = ['cannonTimer','vortexTimer','constantTimer','bellTimer','birdTimer','daggerTimer','beamTimer','spiritTimer','attackTimer','photoTimer','skillTimer','sacramentTimer','knightTimer','steedTimer','siphonTimer','mechTimer'];
+                    const timerKeys = ['cannonTimer','vortexTimer','constantTimer','bellTimer','birdTimer','dartTimer','daggerTimer','beamTimer','spiritTimer','attackTimer','photoTimer','skillTimer','sacramentTimer','knightTimer','steedTimer','mechTimer'];
                     timerKeys.forEach(k => { if (t[k] !== undefined) t[k] += 5; });
                     sTxt(eng, t.x, t.y - 25, '⏩ +5s', '#94A3B8');
                   });
                   eng.spawnParticle({ type: 'text', x: eng.arenaSize/2, y: eng.arenaSize/2, text: '🌑 光速歸零！', color: '#94A3B8', maxLifespan: 2 });
                 } else if (chosen === 'planck') {
-                  // 普朗克：格子化5秒
                   eng.planckActive = (eng.planckActive || 0) + 5;
                   eng.spawnParticle({ type: 'text', x: eng.arenaSize/2, y: eng.arenaSize/2, text: '▦ 戰場離散化！', color: '#34D399', maxLifespan: 2 });
                 } else if (chosen === 'boltzmann') {
-                  // 波茲曼：時間以2倍速倒流5秒
                   eng.boltzmannActive = (eng.boltzmannActive || 0) + 5;
                   eng.spawnParticle({ type: 'text', x: eng.arenaSize/2, y: eng.arenaSize/2, text: '🔄 時間倒流！', color: '#F472B6', maxLifespan: 2 });
                   eng.balls.forEach(t => { if(t.hp>0&&!t.isBlank) sTxt(eng, t.x, t.y-20, '倒流', '#F472B6'); });
+                }
+
+                // 四個常數全部用完後立即進入蓄力，無需等下個計時器
+                if (b.usedConstants.length >= CONSTANTS.length) {
+                  b.isCharging = true;
+                  b.chargeTimer = 10;
+                  b.chargeDamageAccum = 0;
+                  sTxt(eng, b.x, b.y - 50, '【蓄力】開始！', '#A78BFA', 0, 2);
                 }
               }
 
