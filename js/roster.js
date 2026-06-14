@@ -673,5 +673,154 @@ const ROSTER = {
                 }
             }
           },
+          entropy_crown: {
+            id: 'entropy_crown', faction: 'WorldCircle', name: '熵冠者', title: '物理崩潰 / 世界邊緣', color: '#A78BFA', mass: 1.0,
+            desc: '【性相】沌之性相\n【被動】每15秒隨機使一個物理常數歸零，5秒後恢復。\n【基本電荷】所有碰撞消失\n【光速】螢幕閃黑，所有計時器提前5秒\n【普朗克常數】戰場格子化，單位被吸附到格子中心\n【波茲曼常數】所有單位時間以2倍速倒流\n【終末】四個常數都觸發後，蓄力10秒（每受20傷+1s），蓄力完成則爆發【負創】5秒200%HP傷害；若被淘汰則反轉為治療8秒，後重置。',
+            initLogic: b => {
+              b.constantTimer = 0;
+              b.usedConstants = [];
+              b.isCharging = false;
+              b.chargeTimer = 0;
+              b.chargeDamageAccum = 0;
+              b.isNegativeCreation = false;
+              b.ncTimer = 0;
+              b.healingMode = false;
+              b.scalingValue = '物理常數: 電荷 光速 普朗克 波茲曼';
+            },
+            onTakeDamage: (b, a, src, eng, dType) => {
+              if (b.isCharging && a > 0) {
+                b.chargeDamageAccum = (b.chargeDamageAccum || 0) + a;
+                while (b.chargeDamageAccum >= 20) {
+                  b.chargeDamageAccum -= 20;
+                  b.chargeTimer += 1;
+                  sTxt(eng, b.x, b.y - 35, '蓄力 +1s', '#A78BFA');
+                }
+              }
+              if (b.healingMode) {
+                // 受到傷害時轉為治療，可超過生命值上限
+                eng.applyHeal(b, a, b.uniqueId, true);
+                return 0;
+              }
+              return a;
+            },
+            update: (b, eng) => {
+              const CONSTANTS = ['charge', 'lightspeed', 'planck', 'boltzmann'];
+              const NAMES = { charge: '⚡基本電荷歸零', lightspeed: '🌑光速歸零', planck: '▦普朗克常數歸零', boltzmann: '🔄波茲曼常數歸零' };
+
+              // ── 負創爆發模式 ──
+              if (b.isNegativeCreation) {
+                b.ncTimer += DT;
+                eng.balls.forEach(t => {
+                  if (t.hp <= 0 || t.uniqueId === b.uniqueId || t.isBlank) return;
+                  const totalDmg = t.maxHp * 2; // 5秒內造成200% HP傷害
+                  eng.applyDamage(t, (totalDmg / 5) * DT, b.uniqueId, 'magic');
+                });
+                if (b.ncTimer >= 5) {
+                  b.isNegativeCreation = false;
+                  // 重置
+                  b.usedConstants = [];
+                  b.isCharging = false;
+                  b.chargeTimer = 0;
+                  b.chargeDamageAccum = 0;
+                  sTxt(eng, b.x, b.y - 50, '物理常數重置', '#A78BFA', 0, 1.5);
+                  b.scalingValue = '物理常數: 電荷 光速 普朗克 波茲曼';
+                }
+                b.scalingValue = `【負創】剩餘: ${max(0, 5 - b.ncTimer).toFixed(1)}s`;
+                return;
+              }
+
+              // ── 治癒模式（蓄力失敗）──
+              if (b.healingMode) {
+                b.ncTimer += DT;
+                if (b.ncTimer >= 8) {
+                  b.healingMode = false;
+                  b.ncTimer = 0;
+                  b.usedConstants = [];
+                  b.isCharging = false;
+                  b.chargeTimer = 0;
+                  b.chargeDamageAccum = 0;
+                  sTxt(eng, b.x, b.y - 50, '物理常數重置', '#A78BFA', 0, 1.5);
+                  b.scalingValue = '物理常數: 電荷 光速 普朗克 波茲曼';
+                }
+                b.scalingValue = `【治癒】恢復中: ${max(0, 8 - b.ncTimer).toFixed(1)}s`;
+                return;
+              }
+
+              // ── 蓄力倒計時 ──
+              if (b.isCharging) {
+                b.chargeTimer -= DT;
+                b.scalingValue = `【蓄力】倒數: ${max(0, b.chargeTimer).toFixed(1)}s | 已受 ${floor(b.chargeDamageAccum||0)}/20 傷`;
+                if (b.chargeTimer <= 0) {
+                  if (b.hp > 0) {
+                    // 蓄力成功 → 負創爆發
+                    b.isCharging = false;
+                    b.isNegativeCreation = true;
+                    b.ncTimer = 0;
+                    sTxt(eng, eng.arenaSize / 2, eng.arenaSize / 2, '【負創，反造物，致虛無】', '#A78BFA', 0, 2.5);
+                    eng.spawnWave({ x: b.x, y: b.y, startRadius: 0, maxRadius: eng.arenaSize * 2, speed: 500, color: 'rgba(167,139,250,0.6)', ownerId: b.uniqueId, lingerDuration: 0.2 });
+                  } else {
+                    // 蓄力期間死亡 → 不淘汰，轉為治癒模式
+                    b.hp = 0.1;
+                    b.isCharging = false;
+                    b.healingMode = true;
+                    b.ncTimer = 0;
+                    sTxt(eng, b.x, b.y - 50, '蓄力終焉→治癒轉化', '#A78BFA', 0, 2);
+                  }
+                }
+                return;
+              }
+
+              // ── 物理常數計時 ──
+              if ((b.constantTimer += DT) >= 15) {
+                b.constantTimer = 0;
+                const remaining = CONSTANTS.filter(c => !b.usedConstants.includes(c));
+                if (remaining.length === 0) {
+                  // 四個都用完，進入蓄力
+                  b.isCharging = true;
+                  b.chargeTimer = 10;
+                  b.chargeDamageAccum = 0;
+                  sTxt(eng, b.x, b.y - 50, '【蓄力】開始！', '#A78BFA', 0, 2);
+                  return;
+                }
+                const chosen = remaining[floor(random() * remaining.length)];
+                b.usedConstants.push(chosen);
+                sTxt(eng, eng.arenaSize / 2, eng.arenaSize / 2 - 40, NAMES[chosen], '#A78BFA', 0, 1.8);
+
+                if (chosen === 'charge') {
+                  // 基本電荷：碰撞消失5秒
+                  eng.chargeActive = (eng.chargeActive || 0) + 5;
+                  eng.spawnParticle({ type: 'text', x: eng.arenaSize/2, y: eng.arenaSize/2, text: '⚡ 碰撞消失！', color: '#FCD34D', maxLifespan: 2 });
+                  eng.balls.forEach(t => { if(t.hp>0&&!t.isBlank) sTxt(eng, t.x, t.y-20, '無碰撞', '#FCD34D'); });
+                } else if (chosen === 'lightspeed') {
+                  // 光速：螢幕閃黑 + 所有計時器提前5秒
+                  eng.lightspeedFlash = 0.5;
+                  eng.balls.forEach(t => {
+                    if (t.hp <= 0 || t.isBlank) return;
+                    // 對所有角色的常見計時器提前5秒（增加計時值讓它們更快觸發）
+                    const timerKeys = ['cannonTimer','vortexTimer','constantTimer','bellTimer','birdTimer','daggerTimer','beamTimer','spiritTimer','attackTimer','photoTimer','skillTimer','sacramentTimer','knightTimer','steedTimer','siphonTimer','mechTimer'];
+                    timerKeys.forEach(k => { if (t[k] !== undefined) t[k] += 5; });
+                    sTxt(eng, t.x, t.y - 25, '⏩ +5s', '#94A3B8');
+                  });
+                  eng.spawnParticle({ type: 'text', x: eng.arenaSize/2, y: eng.arenaSize/2, text: '🌑 光速歸零！', color: '#94A3B8', maxLifespan: 2 });
+                } else if (chosen === 'planck') {
+                  // 普朗克：格子化5秒
+                  eng.planckActive = (eng.planckActive || 0) + 5;
+                  eng.spawnParticle({ type: 'text', x: eng.arenaSize/2, y: eng.arenaSize/2, text: '▦ 戰場離散化！', color: '#34D399', maxLifespan: 2 });
+                } else if (chosen === 'boltzmann') {
+                  // 波茲曼：時間以2倍速倒流5秒
+                  eng.boltzmannActive = (eng.boltzmannActive || 0) + 5;
+                  eng.spawnParticle({ type: 'text', x: eng.arenaSize/2, y: eng.arenaSize/2, text: '🔄 時間倒流！', color: '#F472B6', maxLifespan: 2 });
+                  eng.balls.forEach(t => { if(t.hp>0&&!t.isBlank) sTxt(eng, t.x, t.y-20, '倒流', '#F472B6'); });
+                }
+              }
+
+              // ── 顯示剩餘常數 ──
+              if (!b.isCharging && !b.isNegativeCreation && !b.healingMode) {
+                const remaining = CONSTANTS.filter(c => !b.usedConstants.includes(c));
+                const shortNames = { charge: '電荷', lightspeed: '光速', planck: '普朗克', boltzmann: '波茲曼' };
+                b.scalingValue = `下個常數: ${max(0, 15 - b.constantTimer).toFixed(1)}s | 剩餘: ${remaining.map(c => shortNames[c]).join(' ')||'進入蓄力'}`;
+              }
+            }
+          },
           dummy: { id:'dummy', faction:'Other', name:'巨大木樁', title:'測試用', color:'#8B4513', mass:15, radiusMult:3, desc:'無情靶子。', initLogic: b => { b.scalingValue=`木樁模式`; b.speedMult=0; }, modifyDamageOut: ()=>0 }
         };

@@ -5,6 +5,7 @@ const CharacterOptions = () => (
             <optgroup label="時間總局">{Object.values(ROSTER).filter(c=>c.faction==='TimeAdmin').map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
             <optgroup label="永滅故事集委員會">{Object.values(ROSTER).filter(c=>c.faction==='StorybookCommittee'&&c.id!=='dummy').map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
             <optgroup label="明日公司">{Object.values(ROSTER).filter(c=>c.faction==='TomorrowCompany'&&c.id!=='fanatic_fan').map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
+            <optgroup label="世界圈">{Object.values(ROSTER).filter(c=>c.faction==='WorldCircle').map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
           </React.Fragment>
         );
 
@@ -129,6 +130,36 @@ const CharacterOptions = () => (
               init: () => { engine.balls=[]; engine.projectiles=[]; engine.waves=[]; engine.particles=[]; engine.obstacles=[]; engine.time=engine.healthPackTimer=engine.globalLostHp=0; if(engine.scene==='court')engine.spawnObstacle({type:'gavel',x:engine.arenaSize/2,y:engine.arenaSize/2,radius:25,color:'#A8A29E',lifespan:99999}); if(gameMode==='ffa')for(let i=0;i<ffaCount;i++)engine.balls.push(engine.createBall(ROSTER[ffaIds[i]],`p${i+1}`,`p${i+1}_m`,true,100,engine.arenaSize/2+cos(i*(PI*2/ffaCount)-PI/2)*engine.arenaSize*0.35,engine.arenaSize/2+sin(i*(PI*2/ffaCount)-PI/2)*engine.arenaSize*0.35)); else if(gameMode==='intervention'){engine.balls.push(engine.createBall(ROSTER[p1Ids[0]],'p1','p1_m',true,100,engine.arenaSize*.25,engine.arenaSize/2));engine.balls.push(engine.createBall(ROSTER[p2Ids[0]],'p2','p2_m',true,100,engine.arenaSize*.75,engine.arenaSize/2));} else if(gameMode==='3v3'){p1Ids.slice(0,3).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p1',`p1_m_${i}`,true,500,engine.arenaSize*.2,engine.arenaSize*(.25+i*.25))));p2Ids.slice(0,3).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p2',`p2_m_${i}`,true,500,engine.arenaSize*.8,engine.arenaSize*(.25+i*.25))));} else if(gameMode==='1v4'){p1Ids.slice(0,4).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p1',`p1_m_${i}`,true,250,engine.arenaSize*.2,engine.arenaSize*(.2+i*.2))));const bs=engine.createBall(ROSTER[p2Ids[0]],'p2','p2_b',true,5000,engine.arenaSize*.8,engine.arenaSize/2);bs.radiusMult=(ROSTER[p2Ids[0]].radiusMult||1)*3;bs.radius=BALL_RADIUS*bs.radiusMult;bs.mass=(ROSTER[p2Ids[0]].mass||1)*10;bs.isBoss=true;engine.balls.push(bs);} else if(gameMode==='test'){engine.dpsRecords=[];engine.lastRecordTime=0;engine.balls.push(engine.createBall(ROSTER[p1Ids[0]],'p1','p1_m',true,100,engine.arenaSize*.25,engine.arenaSize/2));if(testType==='dummy'){engine.timeLimit=120;engine.balls.push(engine.createBall(ROSTER['dummy'],'p2','p2_m',true,5000,engine.arenaSize*.75,engine.arenaSize/2));}else{engine.endlessWave=1;engine.balls.push(engine.createBall(ROSTER['endless_minion'],'p2',`e_1`,true,1,engine.arenaSize/2,60));}} else if(gameMode==='regen'){p1Ids.slice(0,4).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p1',`p1_m_${i}`,true,250,engine.arenaSize*.2,engine.arenaSize*(.2+i*.2))));p2Ids.slice(0,4).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p2',`p2_m_${i}`,true,250,engine.arenaSize*.8,engine.arenaSize*(.2+i*.2))));} },
               update: () => {
                 engine.time+=DT;
+                // ── 熵冠者：波茲曼常數（時間倒流 x2）──
+                if (engine.boltzmannActive > 0) {
+                  engine.boltzmannActive -= DT;
+                  // 所有計時器倒流：以負 DT 驅動 update 已在角色 update 裡處理
+                  // 這裡主要處理球體位置倒退
+                  engine.balls.forEach(b => {
+                    if(b.hp<=0) return;
+                    b.x -= b.vx * DT * 2;
+                    b.y -= b.vy * DT * 2;
+                    const as = engine.arenaSize, r = b.radius;
+                    b.x = max(r, min(as-r, b.x));
+                    b.y = max(r, min(as-r, b.y));
+                  });
+                }
+                // ── 熵冠者：普朗克常數（格子化）──
+                if (engine.planckActive > 0) {
+                  engine.planckActive -= DT;
+                  const gridSize = 60;
+                  engine.balls.forEach(b => {
+                    if(b.hp<=0) return;
+                    b.x = (floor(b.x / gridSize) + 0.5) * gridSize;
+                    b.y = (floor(b.y / gridSize) + 0.5) * gridSize;
+                  });
+                  engine.projectiles.forEach(p => {
+                    if(p.type!=='cross_laser' && p.type!=='laser') {
+                      p.x = (floor(p.x / gridSize) + 0.5) * gridSize;
+                      p.y = (floor(p.y / gridSize) + 0.5) * gridSize;
+                    }
+                  });
+                }
                 if(gameMode==='regen') {
                    if(engine.teamDeathCounts.p1 >= 20) return 'p2';
                    if(engine.teamDeathCounts.p2 >= 20) return 'p1';
@@ -244,6 +275,8 @@ const CharacterOptions = () => (
 
                 for(let i=0;i<engine.balls.length;i++){ for(let j=i+1;j<engine.balls.length;j++){ const b1=engine.balls[i], b2=engine.balls[j]; if(b1.hp<=0||b2.hp<=0||b1.isBlank||b2.isBlank||(b1.phantomId===b2.uniqueId||b2.phantomId===b1.uniqueId||b1.mainId===b2.uniqueId||b2.mainId===b1.uniqueId))continue;
                   if(b1.isChessPiece||b2.isChessPiece){const d=distance(b1.x,b1.y,b2.x,b2.y); if(d<b1.radius+b2.radius){const p=b1.isChessPiece?b1:b2, o=b1.isChessPiece?b2:b1; if(p.isChessPiece&&o.isChessPiece)continue; if(engine.isEnemy(p.ownerId,o.uniqueId)){const nx=(o.x-p.x)/d||1,ny=(o.y-p.y)/d||0,dot=o.vx*nx+o.vy*ny;if(dot<0){o.vx-=2*dot*nx;o.vy-=2*dot*ny;}o.x+=nx*(p.radius+o.radius-d);o.y+=ny*(p.radius+o.radius-d);if((p.blockCooldowns[o.uniqueId]||0)<=0){p.blockCooldowns[o.uniqueId]=0.5;engine.applyDamage(p,max(0,o.modifyDamageOut?o.modifyDamageOut(o,5,engine,p):5),o.uniqueId,'collision');}}} continue;}
+                  // 熵冠者：基本電荷歸零——所有碰撞無效
+                  if (engine.chargeActive > 0) { engine.chargeActive -= DT; continue; }
                   const dtT = (dao, oth) => engine.obstacles.some(o => o.type === 'inquiry_vortex' && o.ownerId === dao.uniqueId && distance(o.x, o.y, oth.x, oth.y) <= o.attractRadius + oth.radius);
                   if (((b1.id === 'daotuo' || b1.copied === 'daotuo') && dtT(b1, b2)) || ((b2.id === 'daotuo' || b2.copied === 'daotuo') && dtT(b2, b1))) continue;
                   const d=distance(b1.x,b1.y,b2.x,b2.y); if(d<b1.radius+b2.radius){const nx=(b2.x-b1.x)/d||1,ny=(b2.y-b1.y)/d||0,ov=(b1.radius+b2.radius-d)/2,ms=b1.mass+b2.mass,r1=b2.mass/ms,r2=b1.mass/ms; b1.x-=nx*ov*2*r1; b2.x+=nx*ov*2*r2; const kx=b1.vx-b2.vx,ky=b1.vy-b2.vy,rV=nx*kx+ny*ky; if(rV>0){const p=2*rV/ms;b1.vx-=p*b2.mass*nx;b1.vy-=p*b2.mass*ny;b2.vx+=p*b1.mass*nx;b2.vy+=p*b1.mass*ny;if(engine.isEnemy(b1.uniqueId,b2.uniqueId)){const cD=(a,t)=>max(0,a.modifyDamageOut?a.modifyDamageOut(a,5,engine,t):5);engine.applyDamage(b1,cD(b2,b1),b2.uniqueId,'collision');engine.applyDamage(b2,cD(b1,b2),b1.uniqueId,'collision');const rs=hypot(kx,ky);if(b1.onCollide)b1.onCollide(b1,b2,rs,engine);if(b2.onCollide)b2.onCollide(b2,b1,rs,engine);}}} } }
@@ -459,6 +492,51 @@ const CharacterOptions = () => (
                 if(p.type==='text'){ctx.fillStyle=p.color;ctx.globalAlpha=max(0,p.lifespan/p.maxLifespan);ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.fillText(p.text,p.x,p.y);ctx.globalAlpha=1;}
                 else if(p.type==='floating_number'){ctx.fillStyle=p.color;ctx.globalAlpha=max(0,p.lifespan/p.maxLifespan);ctx.font='900 20px "Segoe UI", sans-serif';ctx.textAlign='center';ctx.strokeStyle='#000';ctx.lineWidth=3;ctx.strokeText(p.text,p.x,p.y);ctx.fillText(p.text,p.x,p.y);ctx.globalAlpha=1;}
               });
+
+              // ── 熵冠者全域特效渲染 ──
+              if (eng.lightspeedFlash > 0) {
+                eng.lightspeedFlash -= DT * speedRef.current;
+                ctx.fillStyle = `rgba(0,0,0,${min(1, eng.lightspeedFlash * 2)})`;
+                ctx.fillRect(0, 0, as, as);
+                ctx.fillStyle = `rgba(148,163,184,${min(0.6, eng.lightspeedFlash)})`;
+                ctx.font = 'bold 48px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('🌑 光速歸零', as/2, as/2);
+              }
+              if ((eng.planckActive || 0) > 0) {
+                const gs = 60;
+                ctx.strokeStyle = 'rgba(52,211,153,0.35)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 4]);
+                for (let gx = 0; gx <= as; gx += gs) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, as); ctx.stroke(); }
+                for (let gy = 0; gy <= as; gy += gs) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(as, gy); ctx.stroke(); }
+                ctx.setLineDash([]);
+              }
+              if ((eng.boltzmannActive || 0) > 0) {
+                ctx.fillStyle = 'rgba(244,114,182,0.08)';
+                ctx.fillRect(0, 0, as, as);
+                ctx.fillStyle = 'rgba(244,114,182,0.5)';
+                ctx.font = 'bold 20px sans-serif';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'top';
+                ctx.fillText('🔄 時間倒流', as - 10, 10);
+                ctx.textAlign = 'center';
+              }
+              if ((eng.chargeActive || 0) > 0) {
+                ctx.strokeStyle = 'rgba(252,211,77,0.2)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([8, 8]);
+                for (let cx = 0; cx < as; cx += 30) { ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, as); ctx.stroke(); }
+                for (let cy = 0; cy < as; cy += 30) { ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(as, cy); ctx.stroke(); }
+                ctx.setLineDash([]);
+                ctx.fillStyle = 'rgba(252,211,77,0.5)';
+                ctx.font = 'bold 20px sans-serif';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText('⚡ 無碰撞', as - 10, as - 10);
+                ctx.textAlign = 'center';
+              }
 
 
               if(cT-lU>100){
