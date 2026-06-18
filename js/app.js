@@ -1,13 +1,79 @@
-const CharacterOptions = () => (
-          <React.Fragment>
-            <optgroup label="命定之錨">{Object.values(ROSTER).filter(c=>c.faction==='AnchorOfDestiny').map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
-            <optgroup label="神性大教堂">{Object.values(ROSTER).filter(c=>c.faction==='DivineCathedral').map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
-            <optgroup label="時間總局">{Object.values(ROSTER).filter(c=>c.faction==='TimeAdmin').map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
-            <optgroup label="永滅故事集委員會">{Object.values(ROSTER).filter(c=>c.faction==='StorybookCommittee'&&c.id!=='dummy').map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
-            <optgroup label="明日公司">{Object.values(ROSTER).filter(c=>c.faction==='TomorrowCompany'&&c.id!=='fanatic_fan').map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
-            <optgroup label="世界圈">{Object.values(ROSTER).filter(c=>c.faction==='WorldCircle').map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
-          </React.Fragment>
-        );
+const FACTIONS_META = [
+          { id:'AnchorOfDestiny',   name:'命定之錨',       color:'#818CF8' },
+          { id:'DivineCathedral',   name:'神性大教堂',     color:'#FBBF24' },
+          { id:'TimeAdmin',         name:'時間總局',       color:'#60A5FA' },
+          { id:'StorybookCommittee',name:'永滅故事集',     color:'#34D399' },
+          { id:'TomorrowCompany',   name:'明日公司',       color:'#F87171' },
+          { id:'WorldCircle',       name:'世界圈',         color:'#A78BFA' },
+        ];
+        const PICKER_EXCL = ['dummy','fanatic_fan','endless_minion','chess_piece','quzhe_phantom'];
+
+        const CharacterPicker = ({ value, onChange, disabled, className, small }) => {
+          const [open, setOpen] = useState(false);
+          const [faction, setFaction] = useState(null);
+          const cur = ROSTER[value];
+          const curF = cur ? FACTIONS_META.find(f => f.id === cur.faction) : null;
+          const close = () => { setOpen(false); setFaction(null); };
+          return (
+            <>
+              <button onClick={() => !disabled && setOpen(true)} disabled={disabled} className={className}
+                style={{textAlign:'left', cursor: disabled ? 'default' : 'pointer', lineHeight:'1.3'}}>
+                <span style={{color: curF?.color || '#FFF', fontWeight:'bold'}}>{cur?.name || '選角'}</span>
+                {curF && <span style={{color:'#6B7280', fontSize:'10px', marginLeft:'5px'}}>{curF.name}</span>}
+              </button>
+              {open && (
+                <div style={{position:'fixed',inset:0,zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.88)'}} onClick={close}>
+                  <div style={{background:'#111827',border:'1px solid #374151',borderRadius:'1rem',padding:'1.25rem',width:'19rem',maxHeight:'82vh',overflowY:'auto',boxShadow:'0 25px 60px rgba(0,0,0,0.9)'}} onClick={e=>e.stopPropagation()}>
+                    {!faction ? (
+                      <>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.875rem'}}>
+                          <span style={{color:'white',fontWeight:'bold',fontSize:'0.875rem'}}>選擇陣營</span>
+                          <button onClick={close} style={{background:'none',border:'none',color:'#6B7280',cursor:'pointer',fontSize:'1.1rem',lineHeight:1}}>✕</button>
+                        </div>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.5rem'}}>
+                          {FACTIONS_META.map(f => {
+                            const n = Object.values(ROSTER).filter(c => c.faction === f.id && !PICKER_EXCL.includes(c.id)).length;
+                            return (
+                              <button key={f.id} onClick={() => setFaction(f.id)}
+                                style={{padding:'0.75rem',borderRadius:'0.75rem',border:`2px solid ${f.color}55`,background:`${f.color}18`,cursor:'pointer',textAlign:'left',transition:'filter 0.12s'}}
+                                onMouseEnter={e=>e.currentTarget.style.filter='brightness(1.2)'}
+                                onMouseLeave={e=>e.currentTarget.style.filter='brightness(1)'}>
+                                <div style={{color:f.color,fontWeight:'bold',fontSize:'0.8rem'}}>{f.name}</div>
+                                <div style={{color:'#9CA3AF',fontSize:'0.7rem',marginTop:'2px'}}>{n} 位角色</div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.875rem'}}>
+                          <button onClick={() => setFaction(null)} style={{background:'none',border:'none',color:'#9CA3AF',cursor:'pointer',fontSize:'0.8rem'}}>← 返回</button>
+                          <span style={{color:'white',fontWeight:'bold',fontSize:'0.875rem'}}>{FACTIONS_META.find(f=>f.id===faction)?.name}</span>
+                        </div>
+                        <div style={{display:'flex',flexDirection:'column',gap:'0.35rem'}}>
+                          {Object.values(ROSTER).filter(c => c.faction === faction && !PICKER_EXCL.includes(c.id)).map(c => (
+                            <button key={c.id} onClick={() => { onChange(c.id); close(); }}
+                              style={{padding:'0.55rem 0.75rem',borderRadius:'0.625rem',border:`1px solid ${value===c.id?'rgba(255,255,255,0.7)':'#374151'}`,background:value===c.id?'#374151':'#1F2937',cursor:'pointer',textAlign:'left',transition:'filter 0.1s'}}
+                              onMouseEnter={e=>e.currentTarget.style.filter='brightness(1.15)'}
+                              onMouseLeave={e=>e.currentTarget.style.filter='brightness(1)'}>
+                              <div style={{display:'flex',alignItems:'center',gap:'0.45rem'}}>
+                                <div style={{width:'8px',height:'8px',borderRadius:'50%',background:c.color,boxShadow:`0 0 5px ${c.color}`,flexShrink:0}}></div>
+                                <span style={{color:'white',fontWeight:'bold',fontSize:'0.83rem'}}>{c.name}</span>
+                                {value===c.id && <span style={{marginLeft:'auto',color:'#34D399',fontSize:'0.7rem'}}>✓</span>}
+                              </div>
+                              <div style={{color:'#9CA3AF',fontSize:'0.68rem',marginTop:'2px',marginLeft:'1.1rem'}}>{c.title}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        };
 
 
         const StatPanel = ({ stat, isDummy, isEndless, hpThreshold = 30 }) => {
@@ -593,7 +659,7 @@ const CharacterOptions = () => (
              return (
                  <div key={`ffa_${i}`} className={`p-3 rounded-xl border-2 ${t.b} ${t.bg} flex flex-col gap-1.5 w-full`}>
                      <div className="flex justify-between items-center mb-1"><span className={`text-sm font-bold ${t.txt}`}>{t.lb}</span><button onClick={()=>{const n=[...ffaLocks];n[i]=!n[i];setFfaLocks(n);}} className={`p-1 rounded ${l?`${t.lbg} text-white`:'text-gray-500 hover:text-gray-300'}`}>{l?'🔒':'🔓'}</button></div>
-                     <select value={pid} onChange={e=>{const n=[...ffaIds];n[i]=e.target.value;setFfaIds(n);}} disabled={gameState==='playing'} className="bg-gray-800 text-white p-1.5 text-sm rounded outline-none border border-gray-700 font-bold w-full"><CharacterOptions/></select>
+                     <CharacterPicker value={pid} onChange={v=>{const n=[...ffaIds];n[i]=v;setFfaIds(n);}} disabled={gameState==='playing'} className="bg-gray-800 text-white p-1.5 text-sm rounded border border-gray-700 font-bold w-full block" />
                      <span className={`text-xs ${t.tit} font-semibold mt-1`}>{char.title}</span><p className="text-xs text-gray-400 h-28 overflow-y-auto whitespace-pre-wrap">{char.desc}</p>
                      {gameState!=='menu'&&<StatPanel stat={stat} isDummy={false} isEndless={false} hpThreshold={30} />}
                  </div>
@@ -607,7 +673,7 @@ const CharacterOptions = () => (
              return (
                  <div className={`p-3 rounded-xl border-2 ${t.b} ${t.bg} flex flex-col gap-1.5 w-full`}>
                      <div className="flex justify-between items-center mb-1"><span className={`text-sm font-bold ${t.txt}`}>{t.lb}</span>{!(isD||isE)&&(<button onClick={()=>toggleLock(s,0)} className={`p-1 rounded ${s==='p1'?(p1Locks[0]?'bg-blue-600/50 text-white':'text-gray-500'):(p2Locks[0]?'bg-red-600/50 text-white':'text-gray-500')}`}>{s==='p1'?(p1Locks[0]?'🔒':'🔓'):(p2Locks[0]?'🔒':'🔓')}</button>)}{(isD||isE)&&(<div className="w-3 h-3 rounded-full" style={{backgroundColor:char.color,boxShadow:`0 0 8px ${char.color}`}}></div>)}</div>
-                     {isD?<div className="bg-gray-800 text-amber-100 p-1.5 rounded font-bold text-center border border-amber-900/50 text-sm">巨大木樁 (HP: 5000)</div>:isE?<div className="bg-gray-800 text-teal-100 p-1.5 rounded font-bold text-center border border-teal-900/50 text-sm">無盡狂熱者 (Wave: {stat?floor(stat.maxHp):1})</div>:<select value={pid} onChange={e=>{const n=s==='p1'?[...p1Ids]:[...p2Ids];n[0]=e.target.value;s==='p1'?setP1Ids(n):setP2Ids(n);}} disabled={gameState==='playing'} className="bg-gray-800 text-white p-1.5 text-sm rounded border border-gray-700 font-bold w-full"><CharacterOptions/></select>}
+                     {isD?<div className="bg-gray-800 text-amber-100 p-1.5 rounded font-bold text-center border border-amber-900/50 text-sm">巨大木樁 (HP: 5000)</div>:isE?<div className="bg-gray-800 text-teal-100 p-1.5 rounded font-bold text-center border border-teal-900/50 text-sm">無盡狂熱者 (Wave: {stat?floor(stat.maxHp):1})</div>:<CharacterPicker value={pid} onChange={v=>{const n=s==='p1'?[...p1Ids]:[...p2Ids];n[0]=v;s==='p1'?setP1Ids(n):setP2Ids(n);}} disabled={gameState==='playing'} className="bg-gray-800 text-white p-1.5 text-sm rounded border border-gray-700 font-bold w-full block" />}
                      <span className={`text-xs ${t.tit} font-semibold mt-1`}>{char.title}</span><p className="text-xs text-gray-400 h-28 overflow-y-auto whitespace-pre-wrap">{char.desc}</p>
                      {gameState!=='menu'&&<StatPanel stat={stat} isDummy={isD} isEndless={isE} hpThreshold={isD?500:30} />}
                  </div>
@@ -625,7 +691,7 @@ const CharacterOptions = () => (
                    const isLocked = isP?p1Locks[i]:p2Locks[i];
                    return (
                    <div key={i} className="flex flex-col gap-1 p-1.5 bg-gray-900/60 rounded-lg border border-gray-800">
-                     <div className="flex items-center gap-1.5"><button onClick={()=>toggleLock(s,i)} className={`shrink-0 p-0.5 rounded text-[10px] ${isP?(p1Locks[i]?'bg-blue-600/50 text-white':'text-gray-600'):(p2Locks[i]?'bg-red-600/50 text-white':'text-gray-600')}`}>{isLocked?'🔒':'🔓'}</button><select value={cid} onChange={e=>{const n=[...(isP?p1Ids:p2Ids)];n[i]=e.target.value;(isP?setP1Ids:setP2Ids)(n);}} disabled={gameState==='playing'} className="bg-transparent text-white text-xs font-bold outline-none flex-1 truncate hover:bg-gray-800 rounded px-1 py-0.5"><CharacterOptions/></select></div>
+                     <div className="flex items-center gap-1.5"><button onClick={()=>toggleLock(s,i)} className={`shrink-0 p-0.5 rounded text-[10px] ${isP?(p1Locks[i]?'bg-blue-600/50 text-white':'text-gray-600'):(p2Locks[i]?'bg-red-600/50 text-white':'text-gray-600')}`}>{isLocked?'🔒':'🔓'}</button><CharacterPicker value={cid} onChange={v=>{const n=[...(isP?p1Ids:p2Ids)];n[i]=v;(isP?setP1Ids:setP2Ids)(n);}} disabled={gameState==='playing'} className="bg-gray-900 text-white text-xs font-bold flex-1 rounded px-1 py-0.5 hover:bg-gray-800 block" /></div>
                      {gameState!=='menu'&&stat&&<><StatPanel stat={stat} isDummy={false} isEndless={false} hpThreshold={['3v3','1v4','regen'].includes(gameMode)?150:30} /></>}
                    </div> ); })}
                </div>
