@@ -674,8 +674,8 @@ const ROSTER = {
             }
           },
           entropy_crown: {
-            id: 'entropy_crown', faction: 'WorldCircle', name: '熵冠者', title: '物理崩潰 / 世界邊緣', color: '#A78BFA', mass: 1.0,
-            desc: '【性相】沌之性相\n【被動】每15秒隨機使一個物理常數歸零，5秒後恢復。\n【基本電荷】所有碰撞消失\n【光速】螢幕閃黑，所有計時器提前5秒\n【普朗克常數】戰場格子化，單位被吸附到格子中心\n【波茲曼常數】所有單位時間以2倍速倒流\n【終末】四個常數都觸發後，蓄力10秒（每受20傷+1s），蓄力完成則爆發【負創】5秒200%HP傷害；若被淘汰則反轉為治療8秒，後重置。',
+            id: 'entropy_crown', faction: 'WorldCircle', name: '熵冠者', title: '物理崩潰 / 世界邊緣', color: '#DC143C', mass: 1.0, radiusMult: 1.3,
+            desc: '【性相】沌之性相\n【被動】每15秒隨機使一個物理常數歸零，5秒後恢復。\n【基本電荷】所有碰撞消失，但敵我穿透重疊時依重疊比例持續灼傷（100%重疊=20/秒）\n【光速】畫面如老舊電視關機般閃爍黑屏，所有計時器提前5秒\n【普朗克常數】戰場格子化，單位吸附格中心，時間本身也一格一格跳動\n【阿伏伽德羅常數】全場血量、造成傷害與成長數值5秒內隨機亂跳（不超過上限）\n【終末】四個常數都觸發後，蓄力10秒（每受20傷+1s），蓄力完成則爆發【負創】5秒200%HP傷害；若被淘汰則反轉為治療8秒，後重置。',
             initLogic: b => {
               b.constantTimer = 0;
               b.usedConstants = [];
@@ -685,7 +685,7 @@ const ROSTER = {
               b.isNegativeCreation = false;
               b.ncTimer = 0;
               b.healingMode = false;
-              b.scalingValue = '物理常數: 電荷 光速 普朗克 波茲曼';
+              b.scalingValue = '物理常數: 電荷 光速 普朗克 阿伏伽德羅';
             },
             onTakeDamage: (b, a, src, eng, dType) => {
               if (b.isCharging && a > 0) {
@@ -711,8 +711,8 @@ const ROSTER = {
               return a;
             },
             update: (b, eng) => {
-              const CONSTANTS = ['charge', 'lightspeed', 'planck', 'boltzmann'];
-              const NAMES = { charge: '⚡基本電荷歸零', lightspeed: '🌑光速歸零', planck: '▦普朗克常數歸零', boltzmann: '🔄波茲曼常數歸零' };
+              const CONSTANTS = ['charge', 'lightspeed', 'planck', 'avogadro'];
+              const NAMES = { charge: '⚡基本電荷歸零', lightspeed: '🌑光速歸零', planck: '▦普朗克常數歸零', avogadro: '🧪阿伏伽德羅常數歸零' };
 
               // ── 負創爆發模式 ──
               if (b.isNegativeCreation) {
@@ -730,7 +730,7 @@ const ROSTER = {
                   b.chargeTimer = 0;
                   b.chargeDamageAccum = 0;
                   sTxt(eng, b.x, b.y - 50, '物理常數重置', '#A78BFA', 0, 1.5);
-                  b.scalingValue = '物理常數: 電荷 光速 普朗克 波茲曼';
+                  b.scalingValue = '物理常數: 電荷 光速 普朗克 阿伏伽德羅';
                 }
                 b.scalingValue = `【負創】剩餘: ${max(0, 5 - b.ncTimer).toFixed(1)}s`;
                 return;
@@ -747,7 +747,7 @@ const ROSTER = {
                   b.chargeTimer = 0;
                   b.chargeDamageAccum = 0;
                   sTxt(eng, b.x, b.y - 50, '物理常數重置', '#A78BFA', 0, 1.5);
-                  b.scalingValue = '物理常數: 電荷 光速 普朗克 波茲曼';
+                  b.scalingValue = '物理常數: 電荷 光速 普朗克 阿伏伽德羅';
                 }
                 b.scalingValue = `【治癒】恢復中: ${max(0, 8 - b.ncTimer).toFixed(1)}s`;
                 return;
@@ -789,23 +789,22 @@ const ROSTER = {
                 if (chosen === 'charge') {
                   eng.chargeActive = (eng.chargeActive || 0) + 5;
                   eng.spawnParticle({ type: 'text', x: eng.arenaSize/2, y: eng.arenaSize/2, text: '⚡ 碰撞消失！', color: '#FCD34D', maxLifespan: 2 });
-                  eng.balls.forEach(t => { if(t.hp>0&&!t.isBlank) sTxt(eng, t.x, t.y-20, '無碰撞', '#FCD34D'); });
+                  eng.balls.forEach(t => { if(t.hp>0&&!t.isBlank) sTxt(eng, t.x, t.y-20, '無碰撞·可穿透', '#FCD34D'); });
                 } else if (chosen === 'lightspeed') {
-                  eng.lightspeedFlash = 0.5;
+                  eng.lightspeedFlash = 0.8;
+                  eng.lightspeedFlashMax = 0.8;
                   eng.balls.forEach(t => {
                     if (t.hp <= 0 || t.isBlank) return;
                     const timerKeys = ['cannonTimer','vortexTimer','constantTimer','bellTimer','birdTimer','dartTimer','daggerTimer','beamTimer','spiritTimer','attackTimer','photoTimer','skillTimer','sacramentTimer','knightTimer','steedTimer','mechTimer'];
                     timerKeys.forEach(k => { if (t[k] !== undefined) t[k] += 5; });
-                    sTxt(eng, t.x, t.y - 25, '⏩ +5s', '#94A3B8');
                   });
-                  eng.spawnParticle({ type: 'text', x: eng.arenaSize/2, y: eng.arenaSize/2, text: '🌑 光速歸零！', color: '#94A3B8', maxLifespan: 2 });
                 } else if (chosen === 'planck') {
                   eng.planckActive = (eng.planckActive || 0) + 5;
                   eng.spawnParticle({ type: 'text', x: eng.arenaSize/2, y: eng.arenaSize/2, text: '▦ 戰場離散化！', color: '#34D399', maxLifespan: 2 });
-                } else if (chosen === 'boltzmann') {
-                  eng.boltzmannActive = (eng.boltzmannActive || 0) + 5;
-                  eng.spawnParticle({ type: 'text', x: eng.arenaSize/2, y: eng.arenaSize/2, text: '🔄 時間倒流！', color: '#F472B6', maxLifespan: 2 });
-                  eng.balls.forEach(t => { if(t.hp>0&&!t.isBlank) sTxt(eng, t.x, t.y-20, '倒流', '#F472B6'); });
+                } else if (chosen === 'avogadro') {
+                  eng.avogadroActive = (eng.avogadroActive || 0) + 5;
+                  eng.spawnParticle({ type: 'text', x: eng.arenaSize/2, y: eng.arenaSize/2, text: '🧪 數值紊亂！', color: '#F472B6', maxLifespan: 2 });
+                  eng.balls.forEach(t => { if(t.hp>0&&!t.isBlank) sTxt(eng, t.x, t.y-20, '紊亂', '#F472B6'); });
                 }
 
                 // 四個常數全部用完後立即進入蓄力，無需等下個計時器
@@ -820,7 +819,7 @@ const ROSTER = {
               // ── 顯示剩餘常數 ──
               if (!b.isCharging && !b.isNegativeCreation && !b.healingMode) {
                 const remaining = CONSTANTS.filter(c => !b.usedConstants.includes(c));
-                const shortNames = { charge: '電荷', lightspeed: '光速', planck: '普朗克', boltzmann: '波茲曼' };
+                const shortNames = { charge: '電荷', lightspeed: '光速', planck: '普朗克', avogadro: '阿伏伽德羅' };
                 b.scalingValue = `下個常數: ${max(0, 15 - b.constantTimer).toFixed(1)}s | 剩餘: ${remaining.map(c => shortNames[c]).join(' ')||'進入蓄力'}`;
               }
             }
