@@ -676,13 +676,57 @@ const ROSTER = {
           },
           yinhuiyin: {
             id: 'yinhuiyin', faction: 'AnchorOfDestiny', name: '音徊因', title: '回文 / 『湧』之錨', color: '#F0ABFC', mass: 1.0,
-            desc: '【性相】沌之性相\n【被動】場上隨機浮現「無」「窮」「盡」文字，碰觸即收集成字串（上限8字）。當前字串為回文時（如「無」「無窮無」），造成傷害乘以(1+字數×0.2)倍。\n【主動】每0.8秒發射光束，造成8點傷害。\n【湧現】字串達8字上限時，下一發光束強化至8倍傷害，並將文字化為小球射出（8點生命值）。',
-            initLogic: b => { b.echoString = []; b.beamTimer = 0; b.glyphTimer = 0; b.scalingValue = '字串: (空)'; },
+            desc: '【性相】沌之性相\n【被動】場上隨機浮現「無」「窮」「盡」文字，碰觸即收集成字串（上限8字）。當前字串為回文時（如「無」「無窮無」），造成傷害乘以(1+字數×0.2)倍。\n【主動】每0.8秒射出持續延伸雷射（持續1秒），造成8點傷害。\n【湧現】字串達8字上限時，雷射強化至8倍傷害，並將八個文字逐個依序扇形射出（各8點生命值）。',
+            initLogic: b => { b.echoString = []; b.beamTimer = 0; b.glyphTimer = 0; b.yinBeams = []; b.launchQueue = []; b.launchTimer = 0; b.scalingValue = '字串: (空)'; },
             modifyDamageOut: (b, d) => isEchoPalindrome(b.echoString) ? d * (1 + b.echoString.length * 0.2) : d,
             update: (b, eng) => {
               const isPal = isEchoPalindrome(b.echoString);
               b.scalingValue = `字串: ${b.echoString.join('') || '(空)'}${isPal ? ` ✨回文 x${(1 + b.echoString.length * 0.2).toFixed(1)}` : ''}`;
 
+              // 逐個發射佇列（湧現後每0.12秒射出一顆）
+              if (!b.launchQueue) b.launchQueue = [];
+              if (b.launchQueue.length > 0) {
+                if ((b.launchTimer += DT) >= 0.12) {
+                  b.launchTimer = 0;
+                  const item = b.launchQueue.shift();
+                  const unit = eng.createBall(ROSTER.echo_glyph_unit, b.team,
+                    `${b.uniqueId}_eu_${eng.time.toFixed(3)}_${floor(random()*99999)}`,
+                    false, 8, b.x + item.nx * 55, b.y + item.ny * 55);
+                  Object.assign(unit, { ownerId: b.uniqueId, color: b.color, name: item.ch });
+                  unit.vx = item.nx * (320 + random() * 80);
+                  unit.vy = item.ny * (320 + random() * 80);
+                  eng.balls.push(unit);
+                  sTxt(eng, unit.x, unit.y - 20, item.ch, b.color);
+                }
+              }
+
+              // 持續延伸雷射更新（類同行者軌道炮）
+              if (!b.yinBeams) b.yinBeams = [];
+              for (let i = b.yinBeams.length - 1; i >= 0; i--) {
+                const l = b.yinBeams[i];
+                if (!l.hitCooldowns) l.hitCooldowns = {};
+                Object.keys(l.hitCooldowns).forEach(k => l.hitCooldowns[k] -= DT);
+                l.age += DT;
+                const len = min(l.maxLen, l.maxLen * (l.age / 0.5));
+                const ex = l.x + l.dx * len, ey = l.y + l.dy * len;
+                eng.spawnParticle({ type: 'laser', x: l.x, y: l.y, tx: ex, ty: ey, color: l.color, maxLifespan: 0.08 });
+                eng.balls.forEach(t => {
+                  if (t.hp > 0 && eng.isEnemy(t.uniqueId, b.uniqueId) && !t.isBlank) {
+                    const dot = (t.x - l.x) * l.dx + (t.y - l.y) * l.dy;
+                    const clampedDot = max(0, min(len, dot));
+                    const cx = l.x + l.dx * clampedDot, cy = l.y + l.dy * clampedDot;
+                    if (distance(t.x, t.y, cx, cy) < t.radius + l.radius) {
+                      if ((l.hitCooldowns[t.uniqueId] || 0) <= 0) {
+                        eng.applyDamage(t, l.dmgPerHit, b.uniqueId, 'magic');
+                        l.hitCooldowns[t.uniqueId] = 0.15;
+                      }
+                    }
+                  }
+                });
+                if (l.age >= l.duration) b.yinBeams.splice(i, 1);
+              }
+
+              // 文字生成
               if ((b.glyphTimer += DT) >= 3.5) {
                 b.glyphTimer = 0;
                 const existing = eng.obstacles.filter(o => o.type === 'echo_glyph' && o.ownerId === b.uniqueId).length;
@@ -694,6 +738,7 @@ const ROSTER = {
                 }
               }
 
+              // 主動：每0.8秒發射持續雷射
               if ((b.beamTimer += DT) >= 0.8) {
                 b.beamTimer = 0;
                 const t = eng.getNearestEnemy(b);
@@ -702,18 +747,27 @@ const ROSTER = {
                   const empowered = b.echoString.length >= 8;
                   const mult = isPal ? (1 + b.echoString.length * 0.2) : 1;
                   const dmg = (empowered ? 64 : 8) * mult;
-                  eng.spawnProjectile({ type: 'beam', x: b.x, y: b.y, vx: n.x * 900, vy: n.y * 900, radius: empowered ? 10 : 5, color: b.color, ownerId: b.uniqueId, damage: dmg, bounces: 0, lifespan: 1.5 });
+                  // 生成持續延伸雷射
+                  b.yinBeams.push({
+                    x: b.x, y: b.y,
+                    dx: n.x, dy: n.y,
+                    age: 0,
+                    maxLen: eng.arenaSize * 1.5,
+                    duration: 1.0,
+                    radius: empowered ? 10 : 5,
+                    color: empowered ? '#E879F9' : b.color,
+                    dmgPerHit: dmg,
+                    hitCooldowns: {}
+                  });
                   if (empowered) {
-                    const total = b.echoString.length;
+                    // 八個字逐個以扇形排列放入發射佇列
+                    const baseAngle = atan2(n.y, n.x);
                     b.echoString.forEach((ch, i) => {
-                      const angle = (i / total) * PI * 2;
-                      const ux = b.x + cos(angle) * 50, uy = b.y + sin(angle) * 50;
-                      const unit = eng.createBall(ROSTER.echo_glyph_unit, b.team, `${b.uniqueId}_eu_${eng.time.toFixed(3)}_${i}_${floor(random() * 99999)}`, false, 8, ux, uy);
-                      Object.assign(unit, { ownerId: b.uniqueId, color: b.color, name: ch });
-                      unit.vx = cos(angle) * 200;
-                      unit.vy = sin(angle) * 200;
-                      eng.balls.push(unit);
+                      const spread = (i - 3.5) / 7 * (PI / 4); // ±22.5° 扇形
+                      const angle = baseAngle + spread;
+                      b.launchQueue.push({ ch, nx: cos(angle), ny: sin(angle) });
                     });
+                    b.launchTimer = 0;
                     b.echoString = [];
                     sTxt(eng, b.x, b.y - 45, '回文湧現！', b.color, 0, 1.5);
                   }
