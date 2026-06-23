@@ -21,7 +21,7 @@ const FACTIONS_META = [
                 <span style={{color: curF?.color || '#FFF', fontWeight:'bold'}}>{cur?.name || '選角'}</span>
                 {curF && <span style={{color:'#6B7280', fontSize:'10px', marginLeft:'5px'}}>{curF.name}</span>}
               </button>
-              {open && (
+              {open && ReactDOM.createPortal(
                 <div style={{position:'fixed',inset:0,zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.88)'}} onClick={close}>
                   <div style={{background:'#111827',border:'1px solid #374151',borderRadius:'1rem',padding:'1.25rem',width:'19rem',maxHeight:'82vh',overflowY:'auto',boxShadow:'0 25px 60px rgba(0,0,0,0.9)'}} onClick={e=>e.stopPropagation()}>
                     {!faction ? (
@@ -69,7 +69,8 @@ const FACTIONS_META = [
                       </>
                     )}
                   </div>
-                </div>
+                </div>,
+                document.body
               )}
             </>
           );
