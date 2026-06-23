@@ -676,8 +676,8 @@ const ROSTER = {
           },
           yinhuiyin: {
             id: 'yinhuiyin', faction: 'AnchorOfDestiny', name: '音徊因', title: '回文 / 『湧』之錨', color: '#F0ABFC', mass: 1.0,
-            desc: '【性相】沌之性相\n【被動】場上隨機浮現「無」「窮」「盡」文字，碰觸即收集成字串（上限8字）。當前字串為回文時（如「無」「無窮無」），造成傷害乘以(1+字數×0.2)倍。\n【主動】每0.8秒射出持續延伸雷射（持續1秒），造成8點傷害。\n【湧現】字串達8字上限時，雷射強化至8倍傷害，並將八個文字逐個依序扇形射出（各8點生命值）。',
-            initLogic: b => { b.echoString = []; b.beamTimer = 0; b.glyphTimer = 0; b.yinBeams = []; b.launchQueue = []; b.launchTimer = 0; b.scalingValue = '字串: (空)'; },
+            desc: '【性相】沌之性相\n【被動】場上隨機浮現「無」「窮」「盡」文字，碰觸即收集成字串（上限8字）。當前字串為回文時（如「無」「無窮無」），造成傷害乘以(1+字數×0.2)倍。\n【主動】每0.8秒短暫預瞄後發射直線光束，造成8點傷害。\n【湧現】字串達8字上限時，光束強化至8倍傷害，並將八個文字逐個依序扇形射出（各8點生命值）。',
+            initLogic: b => { b.echoString = []; b.beamTimer = 0; b.glyphTimer = 0; b.isAiming = false; b.aimTimer = 0; b.aimDir = {x:1,y:0}; b.launchQueue = []; b.launchTimer = 0; b.scalingValue = '字串: (空)'; },
             modifyDamageOut: (b, d) => isEchoPalindrome(b.echoString) ? d * (1 + b.echoString.length * 0.2) : d,
             update: (b, eng) => {
               const isPal = isEchoPalindrome(b.echoString);
@@ -700,32 +700,6 @@ const ROSTER = {
                 }
               }
 
-              // 持續延伸雷射更新（類同行者軌道炮）
-              if (!b.yinBeams) b.yinBeams = [];
-              for (let i = b.yinBeams.length - 1; i >= 0; i--) {
-                const l = b.yinBeams[i];
-                if (!l.hitCooldowns) l.hitCooldowns = {};
-                Object.keys(l.hitCooldowns).forEach(k => l.hitCooldowns[k] -= DT);
-                l.age += DT;
-                const len = min(l.maxLen, l.maxLen * (l.age / 0.5));
-                const ex = l.x + l.dx * len, ey = l.y + l.dy * len;
-                eng.spawnParticle({ type: 'laser', x: l.x, y: l.y, tx: ex, ty: ey, color: l.color, maxLifespan: 0.08 });
-                eng.balls.forEach(t => {
-                  if (t.hp > 0 && eng.isEnemy(t.uniqueId, b.uniqueId) && !t.isBlank) {
-                    const dot = (t.x - l.x) * l.dx + (t.y - l.y) * l.dy;
-                    const clampedDot = max(0, min(len, dot));
-                    const cx = l.x + l.dx * clampedDot, cy = l.y + l.dy * clampedDot;
-                    if (distance(t.x, t.y, cx, cy) < t.radius + l.radius) {
-                      if ((l.hitCooldowns[t.uniqueId] || 0) <= 0) {
-                        eng.applyDamage(t, l.dmgPerHit, b.uniqueId, 'magic');
-                        l.hitCooldowns[t.uniqueId] = 0.15;
-                      }
-                    }
-                  }
-                });
-                if (l.age >= l.duration) b.yinBeams.splice(i, 1);
-              }
-
               // 文字生成
               if ((b.glyphTimer += DT) >= 3.5) {
                 b.glyphTimer = 0;
@@ -738,32 +712,36 @@ const ROSTER = {
                 }
               }
 
-              // 主動：每0.8秒發射持續雷射
-              if ((b.beamTimer += DT) >= 0.8) {
-                b.beamTimer = 0;
-                const t = eng.getNearestEnemy(b);
-                if (t) {
-                  const n = normalize(t.x - b.x, t.y - b.y);
+              // 主動：像托特一樣先預瞄，結束後瞬間發射直線光束。
+              if (b.isAiming) {
+                if ((b.aimTimer -= DT) > 0.1) {
+                  const t = eng.getNearestEnemy(b);
+                  if (t) b.aimDir = normalize(t.x - b.x, t.y - b.y);
+                }
+                const warnLen = eng.arenaSize * 1.35;
+                eng.spawnParticle({ type: 'laser', x: b.x, y: b.y, tx: b.x + b.aimDir.x * warnLen, ty: b.y + b.aimDir.y * warnLen, color: 'rgba(240,171,252,0.35)', maxLifespan: 0.04 });
+                if (b.aimTimer <= 0) {
+                  b.isAiming = false;
                   const empowered = b.echoString.length >= 8;
-                  const mult = isPal ? (1 + b.echoString.length * 0.2) : 1;
+                  const beamPal = isEchoPalindrome(b.echoString);
+                  const mult = beamPal ? (1 + b.echoString.length * 0.2) : 1;
                   const dmg = (empowered ? 64 : 8) * mult;
-                  // 生成持續延伸雷射
-                  b.yinBeams.push({
-                    x: b.x, y: b.y,
-                    dx: n.x, dy: n.y,
-                    age: 0,
-                    maxLen: eng.arenaSize * 1.5,
-                    duration: 1.0,
-                    radius: empowered ? 10 : 5,
-                    color: empowered ? '#E879F9' : b.color,
-                    dmgPerHit: dmg,
-                    hitCooldowns: {}
+                  const beamWidth = empowered ? 24 : 14;
+                  const ex = b.x + b.aimDir.x * eng.arenaSize * 2;
+                  const ey = b.y + b.aimDir.y * eng.arenaSize * 2;
+                  eng.balls.forEach(t => {
+                    if (t.hp > 0 && eng.isEnemy(t.uniqueId, b.uniqueId) && !t.isBlank) {
+                      const lineDist = abs(b.aimDir.y * t.x - b.aimDir.x * t.y + b.aimDir.x * b.y - b.aimDir.y * b.x);
+                      const forward = (t.x - b.x) * b.aimDir.x + (t.y - b.y) * b.aimDir.y;
+                      if (lineDist < t.radius + beamWidth && forward > 0) eng.applyDamage(t, dmg, b.uniqueId, 'magic');
+                    }
                   });
+                  eng.spawnParticle({ type: 'laser', x: b.x, y: b.y, tx: ex, ty: ey, color: empowered ? '#E879F9' : b.color, maxLifespan: empowered ? 0.35 : 0.22 });
+                  if (eng.sound) eng.sound('laserBurst', { intensity: empowered ? 1.6 : 1.0, x: b.x, y: b.y });
                   if (empowered) {
-                    // 八個字逐個以扇形排列放入發射佇列
-                    const baseAngle = atan2(n.y, n.x);
+                    const baseAngle = atan2(b.aimDir.y, b.aimDir.x);
                     b.echoString.forEach((ch, i) => {
-                      const spread = (i - 3.5) / 7 * (PI / 4); // ±22.5° 扇形
+                      const spread = (i - 3.5) / 7 * (PI / 4);
                       const angle = baseAngle + spread;
                       b.launchQueue.push({ ch, nx: cos(angle), ny: sin(angle) });
                     });
@@ -771,6 +749,14 @@ const ROSTER = {
                     b.echoString = [];
                     sTxt(eng, b.x, b.y - 45, '回文湧現！', b.color, 0, 1.5);
                   }
+                }
+              } else if ((b.beamTimer += DT) >= 0.8) {
+                b.beamTimer = 0;
+                const t = eng.getNearestEnemy(b);
+                if (t) {
+                  b.isAiming = true;
+                  b.aimTimer = 0.5;
+                  b.aimDir = normalize(t.x - b.x, t.y - b.y);
                 }
               }
             }
