@@ -157,6 +157,20 @@ const FACTIONS_META = [
                  t.hp+=h; t._hA=(t._hA||0)+h;
                  if(t._hA>=1){const s=floor(t._hA); engine.spawnParticle({type:'floating_number',x:t.x+(random()-.5)*20,y:t.y-t.radius,text:`+${s}`,color:'#10B981',vx:(random()-.5)*40,vy:-80-random()*40,maxLifespan:0.8}); t._hA-=s;}
               },
+              respawnForRegen: t => {
+                 if(gameMode !== 'regen' || !t.isMain) return false;
+                 engine.teamDeathCounts[t.team]++;
+                 t.erodedMaxHp = 0;
+                 t.maxHp = t.baseMaxHp;
+                 t.hp = t.maxHp;
+                 t.x = engine.arenaSize/2 + (random()-.5)*200;
+                 t.y = t.team === 'p1' ? 100 : engine.arenaSize-100;
+                 t.vx = t.vy = 0;
+                 engine.balls.forEach(b => { if ((b.id === 'miller' || b.copied === 'miller') && b.doomHeal) b.doomHeal[t.uniqueId] = 0; });
+                 sTxt(engine, t.x, t.y-40, '♻️ 再生！', '#34D399');
+                 engine.applyStatus(t.uniqueId, 'shield', {duration: 3});
+                 return true;
+              },
               applyDamage: (t, a, src, dT='normal') => { if(t.hp<=0)return 0; const sIdx=t.statuses.findIndex(s=>s.type==='shield'); if(sIdx!==-1&&!['burn','dot'].includes(dT)){t.statuses.splice(sIdx,1);sTxt(engine,t.x,t.y+5,'🛡️ 免疫','#CBD5E1');return 0;} let fd=a*engine.globalDamageMultiplier; if(t.statuses){if(t.statuses.some(s=>s.type==='vulnerable'))fd*=1.2;if(t.statuses.some(s=>s.type==='shield_dr'))fd*=0.8;} if(t.onTakeDamage)fd=max(0,t.onTakeDamage(t,fd,src,engine,dT)); const ls=min(t.hp,fd); engine.globalLostHp=(engine.globalLostHp||0)+ls; t._dA=(t._dA||0)+fd; if(t._dA>=1){const s=floor(t._dA);engine.spawnParticle({type:'floating_number',x:t.x+(random()-.5)*20,y:t.y-t.radius,text:`-${s}`,color:'#EF4444',vx:(random()-.5)*40,vy:-80-random()*40,maxLifespan:0.8});t._dA-=s;} if(fd>0){ if(dT==='collision')engine.sound('collision',{intensity:Math.min(1.8, fd/6)}); else if(dT==='wall_collision')engine.sound('wallHit',{intensity:Math.min(2, fd/8)}); else if(dT==='projectile')engine.sound('projectileHit',{intensity:Math.min(1.6, fd/5)}); } if(['collision','wall_collision','projectile'].includes(dT)&&fd>0)engine.applyStatus(t.uniqueId,'hitstop',{duration:0.08}); if(t.hp-fd<=0&&(t.id==='kongmie'||t.copied==='kongmie')&&t.act===1){t.hp=t.maxHp;t.act=2;t.path='A';t.waveTimer=0;sTxt(engine,t.x,t.y-40,'第二幕·見那狂風驟雨','#3B82F6');return 0;} if(t.hp-fd<=0&&(t.id==='melis'||t.copied==='melis')&&!t.hasRevived){t.hp=0.1;engine.applyHeal(t,max(1,(t.damageDealt||0)/3));t.hasRevived=true;engine.sound('rebirth');sTxt(engine,t.x,t.y-30,'🔥浴火重生','#FF6B35');engine.spawnWave({x:t.x,y:t.y,startRadius:t.radius,maxRadius:450,speed:700,color:'rgba(255,69,0,0.6)',ownerId:t.uniqueId,lingerDuration:0.1,onHit:tg=>{if(engine.isEnemy(tg.uniqueId,t.uniqueId)){const bs=tg.statuses?.find(s=>s.type==='burn');if(bs&&bs.timer<bs.duration)engine.applyDamage(tg,bs.dps*(bs.duration-bs.timer),t.uniqueId,'magic'); engine.applyStatus(tg.uniqueId,'burn',{duration:3,dps:t.burnDamage,sourceId:t.uniqueId});t.burnDamage+=0.4*(t.noGrowth?0:1);t.scalingValue=`燃燒秒傷: ${t.burnDamage.toFixed(1)}`;}}});return 0;}
               if(t.hp-fd<=0&&engine.scene==='court'&&engine.judgeId===t.uniqueId){engine.judgeId=engine.plaintiffTeam=null;engine.spawnObstacle({type:'gavel',x:t.x,y:t.y,radius:25,color:'#A8A29E',lifespan:99999});sTxt(engine,t.x,t.y-40,'⚖️ 法槌掉落！','#D6D3D1');}
 
@@ -173,19 +187,7 @@ const FACTIONS_META = [
                  }
 
 
-                 if(gameMode === 'regen' && t.isMain) {
-                    engine.teamDeathCounts[t.team]++;
-                    t.erodedMaxHp = 0;
-                    t.maxHp = t.baseMaxHp;
-                    t.hp = t.maxHp;
-                    t.x = engine.arenaSize/2 + (random()-.5)*200;
-                    t.y = t.team === 'p1' ? 100 : engine.arenaSize-100;
-                    t.vx = t.vy = 0;
-                    engine.balls.forEach(b => { if ((b.id === 'miller' || b.copied === 'miller') && b.doomHeal) b.doomHeal[t.uniqueId] = 0; });
-                    sTxt(engine, t.x, t.y-40, '♻️ 再生！', '#34D399');
-                    engine.applyStatus(t.uniqueId, 'shield', {duration: 3});
-                    return 0;
-                 }
+                 if(engine.respawnForRegen(t)) return 0;
               }
 
 
@@ -342,7 +344,7 @@ const FACTIONS_META = [
                 }
 
 
-                engine.balls.forEach(b=>{ if(b.hp<=0||b.isBlank)return; if(b.inQuzheDomain){b.erodedMaxHp+=b.baseMaxHp*(b.currentErosionRate||0.02)*DT;if(b.erodedMaxHp>=b.baseMaxHp){b.erodedMaxHp=b.baseMaxHp;if(b.hp>0){b.hp=0;sTxt(engine,b.x,b.y-30,'💀 侵蝕殆盡!','#059669',0,2);}}}else if(b.erodedMaxHp>0)b.erodedMaxHp=max(0,b.erodedMaxHp-b.baseMaxHp*0.01*DT); b.maxHp=b.baseMaxHp-b.erodedMaxHp; if(b.hp>0) b.hp=min(b.hp, b.maxHp + 100); });
+                engine.balls.forEach(b=>{ if(b.hp<=0||b.isBlank)return; if(b.inQuzheDomain){b.erodedMaxHp+=b.baseMaxHp*(b.currentErosionRate||0.02)*DT;if(b.erodedMaxHp>=b.baseMaxHp){b.erodedMaxHp=b.baseMaxHp;if(b.hp>0){sTxt(engine,b.x,b.y-30,'💀 侵蝕殆盡!','#059669',0,2); if(!engine.respawnForRegen(b)) b.hp=0;}}}else if(b.erodedMaxHp>0)b.erodedMaxHp=max(0,b.erodedMaxHp-b.baseMaxHp*0.01*DT); b.maxHp=b.baseMaxHp-b.erodedMaxHp; if(b.hp>0) b.hp=min(b.hp, b.maxHp + 100); });
 
 
                 for(let i=0;i<engine.balls.length;i++){ for(let j=i+1;j<engine.balls.length;j++){ const b1=engine.balls[i], b2=engine.balls[j]; if(b1.hp<=0||b2.hp<=0||b1.isBlank||b2.isBlank||(b1.phantomId===b2.uniqueId||b2.phantomId===b1.uniqueId||b1.mainId===b2.uniqueId||b2.mainId===b1.uniqueId))continue;
