@@ -676,7 +676,7 @@ const ROSTER = {
           },
           yinhuiyin: {
             id: 'yinhuiyin', faction: 'AnchorOfDestiny', name: '音徊因', title: '回文 / 『湧』之錨', color: '#F0ABFC', mass: 1.0,
-            desc: '【性相】聲之性相\n【被動】場上隨機浮現「無」「窮」「盡」文字，碰觸即收集成字串（上限8字）。當前字串為回文時（如「無」「無窮無」），造成傷害乘以(1+字數×0.2)倍。\n【主動】每0.8秒發射光束，造成8點傷害。\n【湧現】字串達8字上限時，下一發光束強化至8倍傷害，並將文字化為小球射出（8點生命值）。',
+            desc: '【性相】沌之性相\n【被動】場上隨機浮現「無」「窮」「盡」文字，碰觸即收集成字串（上限8字）。當前字串為回文時（如「無」「無窮無」），造成傷害乘以(1+字數×0.2)倍。\n【主動】每0.8秒發射光束，造成8點傷害。\n【湧現】字串達8字上限時，下一發光束強化至8倍傷害，並將文字化為小球射出（8點生命值）。',
             initLogic: b => { b.echoString = []; b.beamTimer = 0; b.glyphTimer = 0; b.scalingValue = '字串: (空)'; },
             modifyDamageOut: (b, d) => isEchoPalindrome(b.echoString) ? d * (1 + b.echoString.length * 0.2) : d,
             update: (b, eng) => {
@@ -704,11 +704,16 @@ const ROSTER = {
                   const dmg = (empowered ? 64 : 8) * mult;
                   eng.spawnProjectile({ type: 'beam', x: b.x, y: b.y, vx: n.x * 900, vy: n.y * 900, radius: empowered ? 10 : 5, color: b.color, ownerId: b.uniqueId, damage: dmg, bounces: 0, lifespan: 1.5 });
                   if (empowered) {
-                    const str = b.echoString.join('');
-                    const ux = b.x + n.x * 50, uy = b.y + n.y * 50;
-                    const unit = eng.createBall(ROSTER.echo_glyph_unit, b.team, `${b.uniqueId}_eu_${eng.time.toFixed(3)}_${floor(random() * 99999)}`, false, 8, ux, uy);
-                    Object.assign(unit, { ownerId: b.uniqueId, color: b.color, name: str || '回文' });
-                    eng.balls.push(unit);
+                    const total = b.echoString.length;
+                    b.echoString.forEach((ch, i) => {
+                      const angle = (i / total) * PI * 2;
+                      const ux = b.x + cos(angle) * 50, uy = b.y + sin(angle) * 50;
+                      const unit = eng.createBall(ROSTER.echo_glyph_unit, b.team, `${b.uniqueId}_eu_${eng.time.toFixed(3)}_${i}_${floor(random() * 99999)}`, false, 8, ux, uy);
+                      Object.assign(unit, { ownerId: b.uniqueId, color: b.color, name: ch });
+                      unit.vx = cos(angle) * 200;
+                      unit.vy = sin(angle) * 200;
+                      eng.balls.push(unit);
+                    });
                     b.echoString = [];
                     sTxt(eng, b.x, b.y - 45, '回文湧現！', b.color, 0, 1.5);
                   }
@@ -724,7 +729,7 @@ const ROSTER = {
           },
           entropy_crown: {
             id: 'entropy_crown', faction: 'WorldCircle', name: '熵冠者', title: '物理崩潰 / 世界邊緣', color: '#DC143C', mass: 1.0, radiusMult: 1.3,
-            desc: '【性相】沌之性相\n【被動】每15秒隨機使一個物理常數歸零，5秒後恢復。\n【基本電荷】所有碰撞消失，但敵我穿透重疊時依重疊比例持續灼傷（100%重疊=20/秒）\n【光速】畫面如老舊電視關機般閃爍黑屏，所有計時器提前5秒\n【普朗克常數】戰場格子化，單位吸附格中心，時間本身也一格一格跳動\n【阿伏伽德羅常數】全場血量、造成傷害與成長數值5秒內隨機亂跳（不超過上限）\n【終末】四個常數都觸發後，蓄力10秒（每受20傷+1s），蓄力完成則爆發【負創】5秒200%HP傷害；若被淘汰則反轉為治療8秒，後重置。',
+            desc: '【性相】型之性相\n【被動】每15秒隨機使一個物理常數歸零，5秒後恢復。\n【基本電荷】所有碰撞消失，但敵我穿透重疊時依重疊比例持續灼傷（100%重疊=20/秒）\n【光速】畫面如老舊電視關機般閃爍黑屏，所有計時器提前5秒\n【普朗克常數】戰場格子化，單位吸附格中心，時間本身也一格一格跳動\n【阿伏伽德羅常數】全場血量、造成傷害與成長數值5秒內隨機亂跳（不超過上限）\n【終末】四個常數都觸發後，蓄力10秒（每受20傷+1s），蓄力完成則爆發【負創】5秒200%HP傷害；若被淘汰則反轉為治療8秒，後重置。',
             initLogic: b => {
               b.constantTimer = 0;
               b.usedConstants = [];
