@@ -6,7 +6,7 @@ const FACTIONS_META = [
           { id:'TomorrowCompany',   name:'明日公司',       color:'#F87171' },
           { id:'WorldCircle',       name:'世界圈',         color:'#DC143C' },
         ];
-        const PICKER_EXCL = ['dummy','fanatic_fan','endless_minion','chess_piece','quzhe_phantom'];
+        const PICKER_EXCL = ['dummy','fanatic_fan','endless_minion','chess_piece','quzhe_phantom','echo_glyph_unit'];
 
         const CharacterPicker = ({ value, onChange, disabled, className, small }) => {
           const [open, setOpen] = useState(false);
@@ -265,6 +265,7 @@ const FACTIONS_META = [
                   else if(o.type==='gavel')engine.balls.forEach(b=>{if(b.hp>0&&!b.isBlank&&distance(b.x,b.y,o.x,o.y)<=o.radius+b.radius){engine.judgeId=b.uniqueId;engine.plaintiffTeam=b.team;o.lifespan=0;sTxt(engine,b.x,b.y-40,'⚖️ 法官就位！','#D6D3D1');}});
                   else if(o.type==='paint_puddle')engine.balls.forEach(b=>{if(b.hp>0&&!b.isBlank&&distance(b.x,b.y,o.x,o.y)<=o.radius+b.radius){const iE=engine.isEnemy(b.uniqueId,o.ownerId);if(o.paintType==='blue')engine.applyStatus(b.uniqueId,iE?'slow':'haste',{duration:0.2});else if(o.paintType==='yellow')engine.applyStatus(b.uniqueId,iE?'vulnerable':'shield_dr',{duration:0.2});else if(o.paintType==='green'){if(iE){b.vx+=(random()-.5)*1200*DT;b.vy+=(random()-.5)*1200*DT;}else engine.applyStatus(b.uniqueId,'regen_small',{duration:0.2});}}});
                   else if(o.type==='thought_core')engine.balls.forEach(b=>{if(b.hp>0&&!b.isBlank&&o.lifespan>0&&distance(b.x,b.y,o.x,o.y)<=o.radius+b.radius){const ow=engine.balls.find(x=>x.uniqueId===o.ownerId);if(ow&&!ow.isSlashing&&!ow.isGathering&&!ow.noGrowth){ow.collectedCores++;ow.scalingValue=`念核: ${ow.collectedCores}/12 | 受擊: ${ow.hitCount}`;} if(b.uniqueId!==o.ownerId){if(engine.isEnemy(b.uniqueId,o.ownerId))engine.applyDamage(b,5,o.ownerId,'magic');else engine.applyHeal(b,5);}o.lifespan=0;}});
+                  else if(o.type==='echo_glyph'&&o.lifespan>0){const ow=engine.balls.find(x=>x.uniqueId===o.ownerId);if(ow&&ow.hp>0&&distance(ow.x,ow.y,o.x,o.y)<=o.radius+ow.radius){if((ow.echoString||[]).length<8){ow.echoString.push(o.char);sTxt(engine,ow.x,ow.y-30,`蒐集「${o.char}」`,ow.color);}o.lifespan=0;}}
                   else if(o.type==='inquiry_vortex' && o.lifespan>0){
                     // 漩渦緩慢移動並減速
                     if(o.vx||o.vy){ o.x+=(o.vx||0)*DT; o.y+=(o.vy||0)*DT; o.vx=(o.vx||0)*0.985; o.vy=(o.vy||0)*0.985; const ar=o.attractRadius||60; o.x=max(ar,min(engine.arenaSize-ar,o.x)); o.y=max(ar,min(engine.arenaSize-ar,o.y)); }
@@ -436,7 +437,7 @@ const FACTIONS_META = [
 
 
           const handleRandomMatch = () => {
-             const keys=Object.keys(ROSTER).filter(k=>!['dummy','fanatic_fan','endless_minion','chess_piece','quzhe_phantom'].includes(k));
+             const keys=Object.keys(ROSTER).filter(k=>!['dummy','fanatic_fan','endless_minion','chess_piece','quzhe_phantom','echo_glyph_unit'].includes(k));
              const rT=(c, l, s) => Array.from({length:s},(_,i)=>l[i]?c[i]:keys[floor(random()*keys.length)]);
              if(gameMode==='ffa') setFfaIds(p=>rT(p,ffaLocks,5));
              else if(['intervention','test'].includes(gameMode)){ setP1Ids(p=>{const r=rT(p,p1Locks,1);return [r[0],p[1],p[2],p[3]];}); if(gameMode!=='test')setP2Ids(p=>{const r=rT(p,p2Locks,1);return [r[0],p[1],p[2],p[3]];}); }
@@ -512,6 +513,7 @@ const FACTIONS_META = [
                   ctx.restore();
                 }
                 else if(o.type==='chess_piece'){ctx.beginPath();ctx.arc(o.x,o.y,o.radius,0,PI*2);ctx.fillStyle='rgba(229,231,235,0.2)';ctx.fill();ctx.strokeStyle=o.color;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=o.color;ctx.font='24px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText({'pawn':'♟','knight':'♞','bishop':'♝','rook':'♜','queen':'♛'}[o.pieceType]||'♟',o.x,o.y);}
+                else if(o.type==='echo_glyph'){ctx.beginPath();ctx.arc(o.x,o.y,o.radius,0,PI*2);ctx.fillStyle='rgba(255,255,255,0.12)';ctx.fill();ctx.strokeStyle=o.color;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=o.color;ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(o.char,o.x,o.y);}
               });
 
               eng.balls.forEach(owner => {

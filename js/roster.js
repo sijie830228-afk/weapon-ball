@@ -1,3 +1,4 @@
+const isEchoPalindrome = arr => arr.length > 0 && arr.join('') === arr.slice().reverse().join('');
 const ROSTER = {
           cacamus: { id:'cacamus', faction:'TimeAdmin', name:'卡卡繆思', title:'棋手 / 西西里防禦', color:'#E5E7EB', mass:1.0, desc:'【性相】啟之性相\n【被動】展開8x8棋盤，死亡時棋子消散。每10秒、血量減少或碰角落增兵。\n【主動】每5秒部署兵。\n【棋子】具備70血量不可鎖定，形成阻擋。',
             initLogic: b => { b.pawnsInHand=2; b.pawnGenTimer=b.pawnDeployTimer=0; b.cornerCooldowns=[0,0,0,0]; b.lastHpMilestone=b.maxHp; b.scalingValue=`手牌: 2 兵`; },
@@ -672,6 +673,54 @@ const ROSTER = {
                     });
                 }
             }
+          },
+          yinhuiyin: {
+            id: 'yinhuiyin', faction: 'AnchorOfDestiny', name: '音徊因', title: '回文 / 『湧』之錨', color: '#F0ABFC', mass: 1.0,
+            desc: '【性相】聲之性相\n【被動】場上隨機浮現「無」「窮」「盡」文字，碰觸即收集成字串（上限8字）。當前字串為回文時（如「無」「無窮無」），造成傷害乘以(1+字數×0.2)倍。\n【主動】每0.8秒發射光束，造成8點傷害。\n【湧現】字串達8字上限時，下一發光束強化至8倍傷害，並將文字化為小球射出（8點生命值）。',
+            initLogic: b => { b.echoString = []; b.beamTimer = 0; b.glyphTimer = 0; b.scalingValue = '字串: (空)'; },
+            modifyDamageOut: (b, d) => isEchoPalindrome(b.echoString) ? d * (1 + b.echoString.length * 0.2) : d,
+            update: (b, eng) => {
+              const isPal = isEchoPalindrome(b.echoString);
+              b.scalingValue = `字串: ${b.echoString.join('') || '(空)'}${isPal ? ` ✨回文 x${(1 + b.echoString.length * 0.2).toFixed(1)}` : ''}`;
+
+              if ((b.glyphTimer += DT) >= 3.5) {
+                b.glyphTimer = 0;
+                const existing = eng.obstacles.filter(o => o.type === 'echo_glyph' && o.ownerId === b.uniqueId).length;
+                if (existing < 4 && b.echoString.length < 8) {
+                  const chars = ['無', '窮', '盡'];
+                  const ch = chars[floor(random() * chars.length)];
+                  const gx = 40 + random() * (eng.arenaSize - 80), gy = 40 + random() * (eng.arenaSize - 80);
+                  eng.spawnObstacle({ type: 'echo_glyph', x: gx, y: gy, radius: 16, char: ch, color: b.color, ownerId: b.uniqueId, lifespan: 14 });
+                }
+              }
+
+              if ((b.beamTimer += DT) >= 0.8) {
+                b.beamTimer = 0;
+                const t = eng.getNearestEnemy(b);
+                if (t) {
+                  const n = normalize(t.x - b.x, t.y - b.y);
+                  const empowered = b.echoString.length >= 8;
+                  const mult = isPal ? (1 + b.echoString.length * 0.2) : 1;
+                  const dmg = (empowered ? 64 : 8) * mult;
+                  eng.spawnProjectile({ type: 'beam', x: b.x, y: b.y, vx: n.x * 900, vy: n.y * 900, radius: empowered ? 10 : 5, color: b.color, ownerId: b.uniqueId, damage: dmg, bounces: 0, lifespan: 1.5 });
+                  if (empowered) {
+                    const str = b.echoString.join('');
+                    const ux = b.x + n.x * 50, uy = b.y + n.y * 50;
+                    const unit = eng.createBall(ROSTER.echo_glyph_unit, b.team, `${b.uniqueId}_eu_${eng.time.toFixed(3)}_${floor(random() * 99999)}`, false, 8, ux, uy);
+                    Object.assign(unit, { ownerId: b.uniqueId, color: b.color, name: str || '回文' });
+                    eng.balls.push(unit);
+                    b.echoString = [];
+                    sTxt(eng, b.x, b.y - 45, '回文湧現！', b.color, 0, 1.5);
+                  }
+                }
+              }
+            }
+          },
+          echo_glyph_unit: { id: 'echo_glyph_unit', faction: 'Other', name: '回文之力', title: '音徊因之衍生物', color: '#F0ABFC', mass: 0.6, radiusMult: 0.45,
+            initLogic: b => { b.isSummon = true; },
+            update: (b, eng) => { const t = eng.getNearestEnemy(b); if (t) { const n = normalize(t.x - b.x, t.y - b.y); b.vx += n.x * 60; b.vy += n.y * 60; const s = hypot(b.vx, b.vy); if (s > 380) { b.vx = (b.vx / s) * 380; b.vy = (b.vy / s) * 380; } } },
+            modifyDamageOut: () => 4,
+            onCollide: () => {}
           },
           entropy_crown: {
             id: 'entropy_crown', faction: 'WorldCircle', name: '熵冠者', title: '物理崩潰 / 世界邊緣', color: '#DC143C', mass: 1.0, radiusMult: 1.3,
