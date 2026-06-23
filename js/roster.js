@@ -568,69 +568,47 @@ const ROSTER = {
             }
           },
           n: { id:'n', faction:'AnchorOfDestiny', name:'N', title:'推理 / 『理』之錨', color:'#D946EF', mass:1.0, 
-            desc:'【性相】型之性相\n【被動】每3秒發射飛鏢。命中敵人時N傳送至飛鏢處；命中牆壁則留下「線索」。\n【主動】場上線索達8個時開始「驗算」：受傷減半、碰撞傷害三倍，從最後一個線索快速逆向移動至第一個線索。\n【得證】驗算完成獲得5秒「得證」：與所有線索連線，觸碰連線的敵人每秒受到(線索步數×5)的傷害，結束後收回線索。',
-            initLogic: b => { b.clues = []; b.dartTimer = 0; b.scalingValue = '線索: 0/8'; },
+            desc:'【性相】型之性相\n【被動】每3秒發射飛鏢。命中敵人時N傳送至飛鏢處；命中牆壁則留下可視「線索」標記。\n【主動】場上線索達8個時開始「驗算」：受傷減半、碰撞傷害三倍，線索會由新到舊依序飛回本體。\n【得證】每個線索回到N身上時爆發一次推理傷害，命中附近敵人後移除該線索。',
+            initLogic: b => { b.clues = []; b.dartTimer = 0; b.returningClues = []; b.scalingValue = '線索: 0/8'; },
             modifyDamageOut: (b, d) => b.isVerifying ? d * 3 : d,
             onTakeDamage: (b, a, s, e) => b.isVerifying ? a * 0.5 : a,
             update: (b, eng) => {
                 if (b.isVerifying) {
-                    b.scalingValue = `驗算中...`;
-                    const targetClue = b.clues[b.verificationIndex - 1];
-                    if (!targetClue) {
+                    if (!b.returningClues) b.returningClues = [];
+                    b.scalingValue = `驗算中... ${8 - b.returningClues.length}/8`;
+                    const clue = b.returningClues[0];
+                    if (!clue) {
                         b.isVerifying = false;
-                        b.provenTimer = 5;
+                        b.clues = [];
+                        eng.obstacles = eng.obstacles.filter(o => !(o.type === 'n_clue' && o.ownerId === b.uniqueId));
                         sTxt(eng, b.x, b.y-40, '得證！', '#D946EF');
                     } else {
-                        const dx = targetClue.x - b.x, dy = targetClue.y - b.y, dist = hypot(dx, dy);
-                        const speed = 2500 * DT;
+                        const marker = eng.obstacles.find(o => o.type === 'n_clue' && o.clueId === clue.clueId);
+                        const sx = marker ? marker.x : clue.x, sy = marker ? marker.y : clue.y;
+                        eng.spawnParticle({type:'laser', x:sx, y:sy, tx:b.x, ty:b.y, color:'#D946EF', maxLifespan:0.06});
+                        const dx = b.x - sx, dy = b.y - sy, dist = hypot(dx, dy);
+                        const speed = 900 * DT;
                         if (dist <= speed) {
-                            b.x = targetClue.x; b.y = targetClue.y;
-                            b.verificationIndex--;
-                            if(b.verificationIndex > 0) sTxt(eng, b.x, b.y-20, `驗算 ${b.verificationIndex}`, '#A855F7');
+                            const damage = 8 + clue.stepNumber * 2;
+                            const radius = 115 + clue.stepNumber * 3;
+                            if (marker) marker.lifespan = 0;
+                            eng.spawnWave({x:b.x,y:b.y,startRadius:0,maxRadius:radius,speed:650,color:'rgba(217,70,239,0.45)',ownerId:b.uniqueId,lingerDuration:0.05,onHit:t=>{if(eng.isEnemy(t.uniqueId,b.uniqueId)&&!t.isBlank)eng.applyDamage(t,damage,b.uniqueId,'magic');}});
+                            sTxt(eng, b.x, b.y-35, `驗算 ${clue.stepNumber}`, '#D946EF');
+                            b.returningClues.shift();
                         } else {
-                            b.x += (dx/dist)*speed;
-                            b.y += (dy/dist)*speed;
+                            const nx = dx / dist, ny = dy / dist;
+                            clue.x = sx + nx * speed;
+                            clue.y = sy + ny * speed;
+                            if (marker) { marker.x = clue.x; marker.y = clue.y; marker.returning = true; }
                         }
                     }
                     return;
                 }
-                
-                if ((b.provenTimer || 0) > 0) {
-                    b.provenTimer -= DT;
-                    b.scalingValue = `得證！ (${b.provenTimer.toFixed(1)}s)`;
-                    b.clues.forEach(c => {
-                        eng.spawnParticle({type:'laser', x:b.x, y:b.y, tx:c.x, ty:c.y, color:'#D946EF', maxLifespan:0.1});
-                        eng.balls.forEach(tg => {
-                            if (tg.hp > 0 && eng.isEnemy(tg.uniqueId, b.uniqueId) && !tg.isBlank) {
-                                const l2 = Math.pow(c.x - b.x, 2) + Math.pow(c.y - b.y, 2);
-                                let dist;
-                                if (l2 === 0) dist = distance(tg.x, tg.y, b.x, b.y);
-                                else {
-                                    let t = ((tg.x - b.x) * (c.x - b.x) + (tg.y - b.y) * (c.y - b.y)) / l2;
-                                    t = max(0, min(1, t));
-                                    dist = distance(tg.x, tg.y, b.x + t * (c.x - b.x), b.y + t * (c.y - b.y));
-                                }
-                                if (dist <= tg.radius + 5) {
-                                    eng.applyDamage(tg, c.stepNumber * DT * 5, b.uniqueId, 'magic');
-                                }
-                            }
-                        });
-                    });
-                    
-                    if (b.provenTimer <= 0) {
-                        b.clues = [];
-                        eng.obstacles = eng.obstacles.filter(o => !(o.type === 'n_clue' && o.ownerId === b.uniqueId));
-                        sTxt(eng, b.x, b.y-30, '線索回收', '#A855F7');
-                    }
-                    return;
-                }
-                
+
                 b.scalingValue = `線索: ${b.clues.length}/8 | 飛鏢: ${max(0, 3-b.dartTimer).toFixed(1)}s`;
                 if (b.clues.length >= 8) {
                     b.isVerifying = true;
-                    b.verificationIndex = b.clues.length - 1;
-                    b.x = b.clues[b.verificationIndex].x;
-                    b.y = b.clues[b.verificationIndex].y;
+                    b.returningClues = b.clues.slice().reverse().map(c => ({...c}));
                     sTxt(eng, b.x, b.y-30, '開始驗算', '#D946EF', 0, 1.5);
                     return;
                 }
@@ -648,7 +626,7 @@ const ROSTER = {
                             onHit: (p, tg, e) => {
                                 p.hitEnemy = true;
                                 const owner = e.balls.find(x => x.uniqueId === p.ownerId);
-                                if (owner && !owner.isVerifying && (owner.provenTimer||0)<=0) {
+                                if (owner && !owner.isVerifying) {
                                     owner.x = tg.x; owner.y = tg.y;
                                     e.spawnParticle({type:'rect_flash', x:tg.x, y:tg.y, size:50, color:'#D946EF', maxLifespan:0.3});
                                     sTxt(e, owner.x, owner.y-30, '傳送', '#D946EF');
@@ -663,8 +641,9 @@ const ROSTER = {
                                         const px = max(15, min(as-15, p.x));
                                         const py = max(15, min(as-15, p.y));
                                         const step = owner.clues.length + 1;
-                                        owner.clues.push({x: px, y: py, stepNumber: step});
-                                        e.spawnObstacle({type:'n_clue', x:px, y:py, radius:12, color:'rgba(217,70,239,0.4)', ownerId: owner.uniqueId, lifespan: 9999, stepNumber: step});
+                                        const clueId = `${owner.uniqueId}_clue_${step}_${Date.now()}_${floor(random()*99999)}`;
+                                        owner.clues.push({x: px, y: py, stepNumber: step, clueId});
+                                        e.spawnObstacle({type:'n_clue', x:px, y:py, radius:12, color:'rgba(217,70,239,0.4)', ownerId: owner.uniqueId, lifespan: 9999, stepNumber: step, clueId});
                                         sTxt(e, px, py-20, `線索 ${step}`, '#D946EF');
                                     }
                                 }
@@ -763,7 +742,7 @@ const ROSTER = {
           },
           echo_glyph_unit: { id: 'echo_glyph_unit', faction: 'Other', name: '回文之力', title: '音徊因之衍生物', color: '#F0ABFC', mass: 0.6, radiusMult: 0.45,
             initLogic: b => { b.isSummon = true; },
-            update: (b, eng) => { const t = eng.getNearestEnemy(b); if (t) { const n = normalize(t.x - b.x, t.y - b.y); b.vx += n.x * 60; b.vy += n.y * 60; const s = hypot(b.vx, b.vy); if (s > 380) { b.vx = (b.vx / s) * 380; b.vy = (b.vy / s) * 380; } } },
+            update: () => {},
             modifyDamageOut: () => 4,
             onCollide: () => {}
           },

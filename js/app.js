@@ -514,6 +514,35 @@ const FACTIONS_META = [
                   ctx.fillText('問', 0, 0);
                   ctx.restore();
                 }
+                else if(o.type==='n_clue'){
+                  const pulse = 0.65 + 0.35 * sin(eng.time * 6 + (o.stepNumber || 1));
+                  ctx.save();
+                  ctx.translate(o.x,o.y);
+                  ctx.rotate((eng.time * 1.8) + (o.stepNumber || 0));
+                  ctx.beginPath();
+                  for(let i=0;i<4;i++){
+                    const a = PI/4 + i*PI/2;
+                    const r = o.returning ? 18 : 14;
+                    const x = cos(a)*r, y = sin(a)*r;
+                    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+                  }
+                  ctx.closePath();
+                  ctx.fillStyle=`rgba(217,70,239,${o.returning ? 0.32 : 0.18})`;
+                  ctx.fill();
+                  ctx.strokeStyle=o.returning?'#F0ABFC':'#D946EF';
+                  ctx.lineWidth=o.returning?3:2;
+                  ctx.shadowColor='#D946EF';
+                  ctx.shadowBlur=o.returning?14:7*pulse;
+                  ctx.stroke();
+                  ctx.shadowBlur=0;
+                  ctx.rotate(-((eng.time * 1.8) + (o.stepNumber || 0)));
+                  ctx.fillStyle='#F5D0FE';
+                  ctx.font='bold 12px sans-serif';
+                  ctx.textAlign='center';
+                  ctx.textBaseline='middle';
+                  ctx.fillText(o.stepNumber || '?',0,0);
+                  ctx.restore();
+                }
                 else if(o.type==='chess_piece'){ctx.beginPath();ctx.arc(o.x,o.y,o.radius,0,PI*2);ctx.fillStyle='rgba(229,231,235,0.2)';ctx.fill();ctx.strokeStyle=o.color;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=o.color;ctx.font='24px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText({'pawn':'♟','knight':'♞','bishop':'♝','rook':'♜','queen':'♛'}[o.pieceType]||'♟',o.x,o.y);}
                 else if(o.type==='echo_glyph'){ctx.beginPath();ctx.arc(o.x,o.y,o.radius,0,PI*2);ctx.fillStyle='rgba(255,255,255,0.12)';ctx.fill();ctx.strokeStyle=o.color;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=o.color;ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(o.char,o.x,o.y);}
               });
