@@ -137,6 +137,7 @@ const FACTIONS_META = [
         function App() {
           const canvasRef = useRef(null), engineRef = useRef(null), isPausedRef = useRef(false), speedRef = useRef(1), soundRef = useRef(createSoundManager());
           const [gameState, setGameState] = useState('menu'), [gameMode, setGameMode] = useState('ffa'), [scene, setScene] = useState('default'), [testType, setTestType] = useState('dummy'), [ffaCount, setFfaCount] = useState(2);
+          const [regenVariant, setRegenVariant] = useState('standard');
           const [ffaIds, setFfaIds] = useState(['kongmie', 'topiharin', 'grimm', 'eli', 'fasimir']), [ffaLocks, setFfaLocks] = useState([false, false, false, false, false]);
           const [p1Ids, setP1Ids] = useState(['kongmie', 'topiharin', 'grimm', 'eli']), [p2Ids, setP2Ids] = useState(['fasimir', 'ecmo', 'creator', 'lisi']);
           const [p1Locks, setP1Locks] = useState([false, false, false, false]), [p2Locks, setP2Locks] = useState([false, false, false, false]);
@@ -249,15 +250,17 @@ const FACTIONS_META = [
               getNearestEnemy: (src) => { let nr=null, md=Infinity; engine.balls.forEach(b=>{if(b.hp>0&&!b.isUntargetable&&engine.isEnemy(b.uniqueId,src.uniqueId)&&!b.isBlank){const d=distance(b.x,b.y,src.x,src.y);if(d<md){md=d;nr=b;}}}); return nr; },
               createBall: (tmp, tm, uid, isM=false, mHp=100, x, y) => { const b={...tmp,uniqueId:uid,team:tm,isMain:isM,hp:mHp,maxHp:mHp,baseMaxHp:mHp,erodedMaxHp:0,x,y,vx:(random()-.5)*BASE_SPEED,vy:(random()-.5)*BASE_SPEED,radius:BALL_RADIUS*(tmp.radiusMult||1),statuses:[],damageDealt:0}; if(b.initLogic)b.initLogic(b); ['birdTimer','bellTimer','pageTimer','skillTimer','musicTimer','wordTimer','daggerTimer','beamTimer','photoTimer','coreTimer','sacramentTimer','creatorTimer'].forEach(k=>{if(b[k]!==undefined)b[k]-=random()*1.5;}); return b; },
               init: () => { engine.balls=[]; engine.projectiles=[]; engine.waves=[]; engine.particles=[]; engine.obstacles=[]; engine.time=engine.healthPackTimer=engine.globalLostHp=0; if(engine.scene==='court')engine.spawnObstacle({type:'gavel',x:engine.arenaSize/2,y:engine.arenaSize/2,radius:25,color:'#A8A29E',lifespan:99999}); if(gameMode==='ffa')for(let i=0;i<ffaCount;i++)engine.balls.push(engine.createBall(ROSTER[ffaIds[i]],`p${i+1}`,`p${i+1}_m`,true,100,engine.arenaSize/2+cos(i*(PI*2/ffaCount)-PI/2)*engine.arenaSize*0.35,engine.arenaSize/2+sin(i*(PI*2/ffaCount)-PI/2)*engine.arenaSize*0.35)); else if(gameMode==='intervention'){engine.balls.push(engine.createBall(ROSTER[p1Ids[0]],'p1','p1_m',true,100,engine.arenaSize*.25,engine.arenaSize/2));engine.balls.push(engine.createBall(ROSTER[p2Ids[0]],'p2','p2_m',true,100,engine.arenaSize*.75,engine.arenaSize/2));} else if(gameMode==='3v3'){p1Ids.slice(0,3).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p1',`p1_m_${i}`,true,500,engine.arenaSize*.2,engine.arenaSize*(.25+i*.25))));p2Ids.slice(0,3).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p2',`p2_m_${i}`,true,500,engine.arenaSize*.8,engine.arenaSize*(.25+i*.25))));} else if(gameMode==='1v4'){p1Ids.slice(0,4).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p1',`p1_m_${i}`,true,250,engine.arenaSize*.2,engine.arenaSize*(.2+i*.2))));const bs=engine.createBall(ROSTER[p2Ids[0]],'p2','p2_b',true,5000,engine.arenaSize*.8,engine.arenaSize/2);bs.radiusMult=(ROSTER[p2Ids[0]].radiusMult||1)*3;bs.radius=BALL_RADIUS*bs.radiusMult;bs.mass=(ROSTER[p2Ids[0]].mass||1)*10;bs.isBoss=true;engine.balls.push(bs);} else if(gameMode==='test'){engine.dpsRecords=[];engine.lastRecordTime=0;engine.balls.push(engine.createBall(ROSTER[p1Ids[0]],'p1','p1_m',true,100,engine.arenaSize*.25,engine.arenaSize/2));if(testType==='dummy'){engine.timeLimit=120;engine.balls.push(engine.createBall(ROSTER['dummy'],'p2','p2_m',true,5000,engine.arenaSize*.75,engine.arenaSize/2));}else{engine.endlessWave=1;engine.balls.push(engine.createBall(ROSTER['endless_minion'],'p2',`e_1`,true,1,engine.arenaSize/2,60));}} else if(gameMode==='regen'){p1Ids.slice(0,4).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p1',`p1_m_${i}`,true,250,engine.arenaSize*.2,engine.arenaSize*(.2+i*.2))));p2Ids.slice(0,4).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p2',`p2_m_${i}`,true,250,engine.arenaSize*.8,engine.arenaSize*(.2+i*.2))));
-                engine.teamModifiers = drawRegenModifiers();
                 engine.teamVengeanceTimer = {p1:0, p2:0};
-                ['p1','p2'].forEach(tm => { if(engine.teamModifiers[tm].includes('big_target')) engine.balls.forEach(b => { if(b.team===tm) b.radius *= 1.15; }); });
-                ['p1','p2'].forEach(tm => {
-                  if(!engine.teamModifiers[tm].includes('first_strike')) return;
-                  const enemyTeam = tm==='p1'?'p2':'p1';
-                  const enemies = engine.balls.filter(b=>b.team===enemyTeam);
-                  for(let i=0;i<2 && enemies.length>0;i++){ const idx=floor(random()*enemies.length); const e=enemies.splice(idx,1)[0]; engine.applyStatus(e.uniqueId,'rooted',{duration:5}); sTxt(engine,e.x,e.y-30,'⛓️ 禁錮','#FCD34D'); }
-                });
+                if(regenVariant==='destiny'){
+                  engine.teamModifiers = drawRegenModifiers();
+                  ['p1','p2'].forEach(tm => { if(engine.teamModifiers[tm].includes('big_target')) engine.balls.forEach(b => { if(b.team===tm) b.radius *= 1.15; }); });
+                  ['p1','p2'].forEach(tm => {
+                    if(!engine.teamModifiers[tm].includes('first_strike')) return;
+                    const enemyTeam = tm==='p1'?'p2':'p1';
+                    const enemies = engine.balls.filter(b=>b.team===enemyTeam);
+                    for(let i=0;i<2 && enemies.length>0;i++){ const idx=floor(random()*enemies.length); const e=enemies.splice(idx,1)[0]; engine.applyStatus(e.uniqueId,'rooted',{duration:5}); sTxt(engine,e.x,e.y-30,'⛓️ 禁錮','#FCD34D'); }
+                  });
+                } else { engine.teamModifiers = {p1:[], p2:[]}; }
               } },
               update: () => {
                 engine.time+=DT;
@@ -823,7 +826,7 @@ const FACTIONS_META = [
               if(res){setGameState('over');setWinner(res);}else aId=requestAnimationFrame(render);
             };
             aId=requestAnimationFrame(render); return ()=>cancelAnimationFrame(aId);
-          }, [gameState, gameMode, testType, p1Ids, p2Ids, ffaIds, ffaCount, scene]);
+          }, [gameState, gameMode, testType, p1Ids, p2Ids, ffaIds, ffaCount, scene, regenVariant]);
 
 
           const renderFfaCard = i => {
@@ -891,8 +894,9 @@ const FACTIONS_META = [
                 )}
                 {gameState === 'menu' && gameMode === 'ffa' && <div className="mt-2.5 flex justify-center items-center gap-3 bg-gray-900/50 p-1.5 rounded-lg border border-gray-800 w-fit mx-auto"><span className="text-gray-400 text-xs font-bold">參戰人數：</span>{[2,3,4,5].map(n=><button key={n} onClick={()=>setFfaCount(n)} className={`px-3 py-1 rounded-full text-xs font-bold ${ffaCount===n?'bg-indigo-600 text-white':'text-gray-500'}`}>{Array(n).fill('1').join('v')}</button>)}</div>}
                 {gameState === 'menu' && gameMode === '3v3' && <div className="mt-2.5 flex justify-center items-center gap-3 bg-gray-900/50 p-1.5 rounded-lg border border-gray-800 w-fit mx-auto"><span className="text-gray-400 text-xs font-bold">對戰場景：</span><button onClick={()=>setScene('default')} className={`px-3 py-1 rounded-full text-xs font-bold ${scene==='default'?'bg-gray-700 text-white':'text-gray-500'}`}>常規競技場</button><button onClick={()=>setScene('court')} className={`px-3 py-1 rounded-full text-xs font-bold ${scene==='court'?'bg-indigo-600 text-white shadow-[0_0_10px_rgba(79,70,229,0.6)]':'text-gray-500'}`}>星宇法庭</button></div>}
+                {gameState === 'menu' && gameMode === 'regen' && <div className="mt-2.5 flex justify-center items-center gap-3 bg-gray-900/50 p-1.5 rounded-lg border border-gray-800 w-fit mx-auto"><span className="text-gray-400 text-xs font-bold">玩法：</span><button onClick={()=>setRegenVariant('standard')} className={`px-3 py-1 rounded-full text-xs font-bold ${regenVariant==='standard'?'bg-gray-700 text-white':'text-gray-500'}`}>標準再生</button><button onClick={()=>setRegenVariant('destiny')} className={`px-3 py-1 rounded-full text-xs font-bold ${regenVariant==='destiny'?'bg-emerald-600 text-white shadow-[0_0_10px_rgba(16,185,129,0.6)]':'text-gray-500'}`}>命運骰局</button></div>}
                 {gameState === 'menu' && gameMode === 'test' && <div className="mt-2.5 flex justify-center items-center gap-3 bg-gray-900/50 p-1.5 rounded-lg border border-gray-800 w-fit mx-auto"><span className="text-gray-400 text-xs font-bold">測試項目：</span><button onClick={()=>setTestType('dummy')} className={`px-3 py-1 rounded-full text-xs font-bold ${testType==='dummy'?'bg-amber-600 text-white':'text-gray-500'}`}>巨大木樁</button><button onClick={()=>setTestType('endless')} className={`px-3 py-1 rounded-full text-xs font-bold ${testType==='endless'?'bg-teal-600 text-white shadow-[0_0_10px_rgba(20,184,166,0.6)]':'text-gray-500'}`}>無盡生存</button></div>}
-                {gameState !== 'menu' && <p className="text-gray-400 text-xs mt-2 flex items-center justify-center gap-2"><Activity size={14} className={{'test':testType==='dummy'?'text-amber-400':'text-teal-400','intervention':'text-purple-400','1v4':'text-rose-400','3v3':'text-orange-400','regen':'text-emerald-400'}[gameMode]||'text-indigo-400'} /> {gameMode==='3v3'?'大地圖亂鬥模式':gameMode==='1v4'?'四人協力討伐巨型首領':gameMode==='regen'?'20殺團隊死鬥 (無限復活)':gameMode==='test'?(testType==='dummy'?'極限 DPS 測試':'無限波次生存挑戰'):gameMode==='intervention'?'神明介入戰局':'多陣營單人混戰'} <Activity size={14} className={{'test':testType==='dummy'?'text-amber-400':'text-teal-400','intervention':'text-purple-400','1v4':'text-rose-400','3v3':'text-orange-400','regen':'text-emerald-400'}[gameMode]||'text-indigo-400'} /></p>}
+                {gameState !== 'menu' && <p className="text-gray-400 text-xs mt-2 flex items-center justify-center gap-2"><Activity size={14} className={{'test':testType==='dummy'?'text-amber-400':'text-teal-400','intervention':'text-purple-400','1v4':'text-rose-400','3v3':'text-orange-400','regen':'text-emerald-400'}[gameMode]||'text-indigo-400'} /> {gameMode==='3v3'?'大地圖亂鬥模式':gameMode==='1v4'?'四人協力討伐巨型首領':gameMode==='regen'?`20殺團隊死鬥 (無限復活)${regenVariant==='destiny'?' · 命運骰局':''}`:gameMode==='test'?(testType==='dummy'?'極限 DPS 測試':'無限波次生存挑戰'):gameMode==='intervention'?'神明介入戰局':'多陣營單人混戰'} <Activity size={14} className={{'test':testType==='dummy'?'text-amber-400':'text-teal-400','intervention':'text-purple-400','1v4':'text-rose-400','3v3':'text-orange-400','regen':'text-emerald-400'}[gameMode]||'text-indigo-400'} /></p>}
               </header>
 
 
