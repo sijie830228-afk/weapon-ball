@@ -8,6 +8,33 @@ const FACTIONS_META = [
         ];
         const PICKER_EXCL = ['dummy','fanatic_fan','endless_minion','chess_piece','quzhe_phantom','echo_glyph_unit'];
 
+        const REGEN_MODIFIERS = {
+          positive: [
+            { id:'first_strike', name:'先手優勢', icon:'⚡', color:'#FCD34D', desc:'開局使敵方2顆球禁錮5秒。' },
+            { id:'last_stand', name:'哀兵必勝', icon:'🩸', color:'#FB7185', desc:'我方目標HP低於30%時，受到的傷害降低15%。' },
+            { id:'vengeance', name:'復仇之火', icon:'🔥', color:'#F97316', desc:'隊友重生後8秒內，我方全體攻擊傷害+15%。' },
+            { id:'fortify', name:'堅壁清野', icon:'🛡️', color:'#60A5FA', desc:'我方受到的碰撞/撞牆傷害降低20%。' },
+            { id:'rebirth_nova', name:'醍醐灌頂', icon:'✨', color:'#34D399', desc:'我方重生時，周圍敵人受到衝擊傷害並減速。' },
+            { id:'numbers_game', name:'衆志成城', icon:'🤝', color:'#A78BFA', desc:'我方存活人數多於敵方時，移動速度+15%。' },
+          ],
+          negative: [
+            { id:'overconfident', name:'眼高手低', icon:'😤', color:'#FCA5A5', desc:'我方沒有增益效果的目標，攻擊傷害降低20%。' },
+            { id:'glass_cannon', name:'色厲內荏', icon:'🥃', color:'#F87171', desc:'我方受到的傷害提高10%。' },
+            { id:'lone_wolf', name:'孤軍難鳴', icon:'🐺', color:'#FB923C', desc:'我方目標附近300內沒有隊友時，受到的傷害提高20%。' },
+            { id:'reckless', name:'投鼠忌器', icon:'⚔️', color:'#EF4444', desc:'我方擊殺敵人後3秒內，自身受到的傷害提高25%。' },
+            { id:'fragile_legs', name:'杞人憂天', icon:'😨', color:'#FDE047', desc:'我方目標HP低於50%時，移動速度降低10%。' },
+            { id:'big_target', name:'樹大招風', icon:'🎯', color:'#F472B6', desc:'我方主力半徑增加15%，更容易被擊中。' },
+          ],
+        };
+        const REGEN_MODIFIER_MAP = Object.fromEntries([...REGEN_MODIFIERS.positive, ...REGEN_MODIFIERS.negative].map(m => [m.id, m]));
+        const drawRegenModifiers = () => {
+          const pick2 = pool => { const a = [...pool]; const out = []; for (let i = 0; i < 2 && a.length > 0; i++) { const idx = floor(random() * a.length); out.push(a.splice(idx, 1)[0].id); } return out; };
+          return {
+            p1: [...pick2(REGEN_MODIFIERS.positive), ...pick2(REGEN_MODIFIERS.negative)],
+            p2: [...pick2(REGEN_MODIFIERS.positive), ...pick2(REGEN_MODIFIERS.negative)],
+          };
+        };
+
         const CharacterPicker = ({ value, onChange, disabled, className, small }) => {
           const [open, setOpen] = useState(false);
           const [faction, setFaction] = useState(null);
@@ -114,6 +141,7 @@ const FACTIONS_META = [
           const [p1Ids, setP1Ids] = useState(['kongmie', 'topiharin', 'grimm', 'eli']), [p2Ids, setP2Ids] = useState(['fasimir', 'ecmo', 'creator', 'lisi']);
           const [p1Locks, setP1Locks] = useState([false, false, false, false]), [p2Locks, setP2Locks] = useState([false, false, false, false]);
           const [isPaused, setIsPaused] = useState(false), [gameSpeed, setGameSpeed] = useState(1), [uiStats, setUiStats] = useState({p1:[],p2:[]}), [winner, setWinner] = useState(null), [soundEnabled, setSoundEnabled] = useState(true);
+          const [regenModifiers, setRegenModifiers] = useState({p1:[], p2:[]});
 
 
           const wakeAudio = () => soundRef.current.unlock();
@@ -142,6 +170,8 @@ const FACTIONS_META = [
             const engine = {
               arenaSize: (gameMode==='3v3'||gameMode==='1v4'||gameMode==='regen')?900:600, scene: gameMode==='3v3'?scene:'default', balls:[], projectiles:[], waves:[], particles:[], obstacles:[], time:0, timeLimit:null, healthPackTimer:0, globalDamageMultiplier:1, globalLostHp:0,
               teamDeathCounts: {p1:0, p2:0},
+              teamModifiers: {p1:[], p2:[]},
+              teamVengeanceTimer: {p1:0, p2:0},
               teamFleshMaterials: {},
               sound: (name, options) => soundRef.current.play(name, options),
               applyRandomPodoasgEffect: (tg, src, nx=0, ny=0, mul=1) => { const ef=['stun','slow','rooted','burn','knockback','warning','silenced','vulnerable','damage'][floor(random()*9)]; if(ef==='stun'){engine.applyStatus(tg.uniqueId,'stun',{duration:3*mul}); sTxt(engine,tg.x,tg.y,'💫 暈眩','#FCD34D');} else if(ef==='slow'){engine.applyStatus(tg.uniqueId,'slow',{duration:3*mul}); sTxt(engine,tg.x,tg.y,'🐌 緩速','#3B82F6');} else if(ef==='rooted'){engine.applyStatus(tg.uniqueId,'rooted',{duration:3*mul}); sTxt(engine,tg.x,tg.y,'⛓️ 禁錮','#4ADE80');} else if(ef==='burn'){engine.applyStatus(tg.uniqueId,'burn',{duration:3*mul,dps:5*mul,sourceId:src}); sTxt(engine,tg.x,tg.y,'🔥 燃燒','#EF4444');} else if(ef==='knockback'){engine.applyStatus(tg.uniqueId,'knockback',{duration:3,sourceId:src}); tg.vx+=nx*800*mul; tg.vy+=ny*800*mul; sTxt(engine,tg.x,tg.y,'💨 擊退','#94A3B8');} else if(ef==='warning'){engine.applyStatus(tg.uniqueId,'warning',{duration:3*mul}); sTxt(engine,tg.x,tg.y,'⚠️ 警告','#FF00FF');} else if(ef==='silenced'){engine.applyStatus(tg.uniqueId,'silenced',{duration:3*mul}); sTxt(engine,tg.x,tg.y,'🔇 沉默','#9333EA');} else if(ef==='vulnerable'){engine.applyStatus(tg.uniqueId,'vulnerable',{duration:3*mul}); sTxt(engine,tg.x,tg.y,'💔 易傷','#EF4444');} else if(ef==='damage'){engine.applyDamage(tg,10*mul,src,'magic'); sTxt(engine,tg.x,tg.y,'💥 傷害','#EF4444');} },
@@ -169,13 +199,35 @@ const FACTIONS_META = [
                  engine.balls.forEach(b => { if ((b.id === 'miller' || b.copied === 'miller') && b.doomHeal) b.doomHeal[t.uniqueId] = 0; });
                  sTxt(engine, t.x, t.y-40, '♻️ 再生！', '#34D399');
                  engine.applyStatus(t.uniqueId, 'shield', {duration: 3});
+                 const tMods = engine.teamModifiers[t.team] || [];
+                 if (tMods.includes('vengeance')) { engine.teamVengeanceTimer[t.team] = 8; sTxt(engine, t.x, t.y-60, '🔥 復仇之火！', '#F97316'); }
+                 if (tMods.includes('rebirth_nova')) {
+                    engine.spawnWave({x:t.x, y:t.y, startRadius:0, maxRadius:160, speed:700, color:'rgba(52,211,153,0.5)', ownerId:t.uniqueId, lingerDuration:0.1,
+                      onHit: e => { if (engine.isEnemy(e.uniqueId, t.uniqueId)) { engine.applyDamage(e, 15, t.uniqueId, 'magic'); engine.applyStatus(e.uniqueId, 'slow', {duration:1.5}); } }});
+                 }
                  return true;
               },
-              applyDamage: (t, a, src, dT='normal') => { if(t.hp<=0)return 0; const sIdx=t.statuses.findIndex(s=>s.type==='shield'); if(sIdx!==-1&&!['burn','dot'].includes(dT)){t.statuses.splice(sIdx,1);sTxt(engine,t.x,t.y+5,'🛡️ 免疫','#CBD5E1');return 0;} let fd=a*engine.globalDamageMultiplier; if(t.statuses){if(t.statuses.some(s=>s.type==='vulnerable'))fd*=1.2;if(t.statuses.some(s=>s.type==='shield_dr'))fd*=0.8;} if(t.onTakeDamage)fd=max(0,t.onTakeDamage(t,fd,src,engine,dT)); const ls=min(t.hp,fd); engine.globalLostHp=(engine.globalLostHp||0)+ls; t._dA=(t._dA||0)+fd; if(t._dA>=1){const s=floor(t._dA);engine.spawnParticle({type:'floating_number',x:t.x+(random()-.5)*20,y:t.y-t.radius,text:`-${s}`,color:'#EF4444',vx:(random()-.5)*40,vy:-80-random()*40,maxLifespan:0.8});t._dA-=s;} if(fd>0){ if(dT==='collision')engine.sound('collision',{intensity:Math.min(1.8, fd/6)}); else if(dT==='wall_collision')engine.sound('wallHit',{intensity:Math.min(2, fd/8)}); else if(dT==='projectile')engine.sound('projectileHit',{intensity:Math.min(1.6, fd/5)}); } if(['collision','wall_collision','projectile'].includes(dT)&&fd>0)engine.applyStatus(t.uniqueId,'hitstop',{duration:0.08}); if(t.hp-fd<=0&&(t.id==='kongmie'||t.copied==='kongmie')&&t.act===1){t.hp=t.maxHp;t.act=2;t.path='A';t.waveTimer=0;sTxt(engine,t.x,t.y-40,'第二幕·見那狂風驟雨','#3B82F6');return 0;} if(t.hp-fd<=0&&(t.id==='melis'||t.copied==='melis')&&!t.hasRevived){t.hp=0.1;engine.applyHeal(t,max(1,(t.damageDealt||0)/3));t.hasRevived=true;engine.sound('rebirth');sTxt(engine,t.x,t.y-30,'🔥浴火重生','#FF6B35');engine.spawnWave({x:t.x,y:t.y,startRadius:t.radius,maxRadius:450,speed:700,color:'rgba(255,69,0,0.6)',ownerId:t.uniqueId,lingerDuration:0.1,onHit:tg=>{if(engine.isEnemy(tg.uniqueId,t.uniqueId)){const bs=tg.statuses?.find(s=>s.type==='burn');if(bs&&bs.timer<bs.duration)engine.applyDamage(tg,bs.dps*(bs.duration-bs.timer),t.uniqueId,'magic'); engine.applyStatus(tg.uniqueId,'burn',{duration:3,dps:t.burnDamage,sourceId:t.uniqueId});t.burnDamage+=0.4*(t.noGrowth?0:1);t.scalingValue=`燃燒秒傷: ${t.burnDamage.toFixed(1)}`;}}});return 0;}
+              applyDamage: (t, a, src, dT='normal') => { if(t.hp<=0)return 0; const sIdx=t.statuses.findIndex(s=>s.type==='shield'); if(sIdx!==-1&&!['burn','dot'].includes(dT)){t.statuses.splice(sIdx,1);sTxt(engine,t.x,t.y+5,'🛡️ 免疫','#CBD5E1');return 0;} let fd=a*engine.globalDamageMultiplier; if(t.statuses){if(t.statuses.some(s=>s.type==='vulnerable'))fd*=1.2;if(t.statuses.some(s=>s.type==='shield_dr'))fd*=0.8;}
+              const atk = gameMode==='regen' ? engine.balls.find(b=>b.uniqueId===src) : null;
+              if(gameMode==='regen'){ const tm=engine.teamModifiers||{p1:[],p2:[]};
+                if(atk && tm[atk.team]){
+                  if(tm[atk.team].includes('overconfident') && !(atk.statuses||[]).some(s=>['haste','haste_double','regen','regen_small','shield','excited','haste_small'].includes(s.type))) fd*=0.8;
+                  if(tm[atk.team].includes('vengeance') && (engine.teamVengeanceTimer?.[atk.team]||0)>0) fd*=1.15;
+                }
+                if(tm[t.team]){
+                  if(tm[t.team].includes('last_stand') && t.hp/t.maxHp<0.3) fd*=0.85;
+                  if(tm[t.team].includes('fortify') && ['collision','wall_collision'].includes(dT)) fd*=0.8;
+                  if(tm[t.team].includes('glass_cannon')) fd*=1.1;
+                  if(tm[t.team].includes('lone_wolf') && !engine.balls.some(o=>o.team===t.team&&o.hp>0&&o.uniqueId!==t.uniqueId&&distance(o.x,o.y,t.x,t.y)<300)) fd*=1.2;
+                }
+                if((t.recklessTimer||0)>0) fd*=1.25;
+              }
+              if(t.onTakeDamage)fd=max(0,t.onTakeDamage(t,fd,src,engine,dT)); const ls=min(t.hp,fd); engine.globalLostHp=(engine.globalLostHp||0)+ls; t._dA=(t._dA||0)+fd; if(t._dA>=1){const s=floor(t._dA);engine.spawnParticle({type:'floating_number',x:t.x+(random()-.5)*20,y:t.y-t.radius,text:`-${s}`,color:'#EF4444',vx:(random()-.5)*40,vy:-80-random()*40,maxLifespan:0.8});t._dA-=s;} if(fd>0){ if(dT==='collision')engine.sound('collision',{intensity:Math.min(1.8, fd/6)}); else if(dT==='wall_collision')engine.sound('wallHit',{intensity:Math.min(2, fd/8)}); else if(dT==='projectile')engine.sound('projectileHit',{intensity:Math.min(1.6, fd/5)}); } if(['collision','wall_collision','projectile'].includes(dT)&&fd>0)engine.applyStatus(t.uniqueId,'hitstop',{duration:0.08}); if(t.hp-fd<=0&&(t.id==='kongmie'||t.copied==='kongmie')&&t.act===1){t.hp=t.maxHp;t.act=2;t.path='A';t.waveTimer=0;sTxt(engine,t.x,t.y-40,'第二幕·見那狂風驟雨','#3B82F6');return 0;} if(t.hp-fd<=0&&(t.id==='melis'||t.copied==='melis')&&!t.hasRevived){t.hp=0.1;engine.applyHeal(t,max(1,(t.damageDealt||0)/3));t.hasRevived=true;engine.sound('rebirth');sTxt(engine,t.x,t.y-30,'🔥浴火重生','#FF6B35');engine.spawnWave({x:t.x,y:t.y,startRadius:t.radius,maxRadius:450,speed:700,color:'rgba(255,69,0,0.6)',ownerId:t.uniqueId,lingerDuration:0.1,onHit:tg=>{if(engine.isEnemy(tg.uniqueId,t.uniqueId)){const bs=tg.statuses?.find(s=>s.type==='burn');if(bs&&bs.timer<bs.duration)engine.applyDamage(tg,bs.dps*(bs.duration-bs.timer),t.uniqueId,'magic'); engine.applyStatus(tg.uniqueId,'burn',{duration:3,dps:t.burnDamage,sourceId:t.uniqueId});t.burnDamage+=0.4*(t.noGrowth?0:1);t.scalingValue=`燃燒秒傷: ${t.burnDamage.toFixed(1)}`;}}});return 0;}
               if(t.hp-fd<=0&&engine.scene==='court'&&engine.judgeId===t.uniqueId){engine.judgeId=engine.plaintiffTeam=null;engine.spawnObstacle({type:'gavel',x:t.x,y:t.y,radius:25,color:'#A8A29E',lifespan:99999});sTxt(engine,t.x,t.y-40,'⚖️ 法槌掉落！','#D6D3D1');}
 
 
               if(t.hp-fd<=0) {
+                 if(gameMode==='regen' && atk && (engine.teamModifiers?.[atk.team]||[]).includes('reckless')) atk.recklessTimer = 3;
                  const hasEcmoAlive = engine.balls.some(x=>x.team===t.team&&x.hp>0&&(x.id==='ecmo'||x.copied==='ecmo'));
                  const hasPrism = hasEcmoAlive && ['abraham','isaac','eli','miller','topiharin','kongmie','hao'].some(id => engine.balls.some(x=>x.team===t.team&&x.hp>0&&(x.id===id||x.copied===id)));
                  if(hasPrism && !t.hasUsedPrismRevive) {
@@ -196,7 +248,17 @@ const FACTIONS_META = [
               isEnemy: (i1, i2) => { const b1=engine.balls.find(b=>b.uniqueId===i1), b2=engine.balls.find(b=>b.uniqueId===i2); return !b1||!b2||b1.team!==b2.team; },
               getNearestEnemy: (src) => { let nr=null, md=Infinity; engine.balls.forEach(b=>{if(b.hp>0&&!b.isUntargetable&&engine.isEnemy(b.uniqueId,src.uniqueId)&&!b.isBlank){const d=distance(b.x,b.y,src.x,src.y);if(d<md){md=d;nr=b;}}}); return nr; },
               createBall: (tmp, tm, uid, isM=false, mHp=100, x, y) => { const b={...tmp,uniqueId:uid,team:tm,isMain:isM,hp:mHp,maxHp:mHp,baseMaxHp:mHp,erodedMaxHp:0,x,y,vx:(random()-.5)*BASE_SPEED,vy:(random()-.5)*BASE_SPEED,radius:BALL_RADIUS*(tmp.radiusMult||1),statuses:[],damageDealt:0}; if(b.initLogic)b.initLogic(b); ['birdTimer','bellTimer','pageTimer','skillTimer','musicTimer','wordTimer','daggerTimer','beamTimer','photoTimer','coreTimer','sacramentTimer','creatorTimer'].forEach(k=>{if(b[k]!==undefined)b[k]-=random()*1.5;}); return b; },
-              init: () => { engine.balls=[]; engine.projectiles=[]; engine.waves=[]; engine.particles=[]; engine.obstacles=[]; engine.time=engine.healthPackTimer=engine.globalLostHp=0; if(engine.scene==='court')engine.spawnObstacle({type:'gavel',x:engine.arenaSize/2,y:engine.arenaSize/2,radius:25,color:'#A8A29E',lifespan:99999}); if(gameMode==='ffa')for(let i=0;i<ffaCount;i++)engine.balls.push(engine.createBall(ROSTER[ffaIds[i]],`p${i+1}`,`p${i+1}_m`,true,100,engine.arenaSize/2+cos(i*(PI*2/ffaCount)-PI/2)*engine.arenaSize*0.35,engine.arenaSize/2+sin(i*(PI*2/ffaCount)-PI/2)*engine.arenaSize*0.35)); else if(gameMode==='intervention'){engine.balls.push(engine.createBall(ROSTER[p1Ids[0]],'p1','p1_m',true,100,engine.arenaSize*.25,engine.arenaSize/2));engine.balls.push(engine.createBall(ROSTER[p2Ids[0]],'p2','p2_m',true,100,engine.arenaSize*.75,engine.arenaSize/2));} else if(gameMode==='3v3'){p1Ids.slice(0,3).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p1',`p1_m_${i}`,true,500,engine.arenaSize*.2,engine.arenaSize*(.25+i*.25))));p2Ids.slice(0,3).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p2',`p2_m_${i}`,true,500,engine.arenaSize*.8,engine.arenaSize*(.25+i*.25))));} else if(gameMode==='1v4'){p1Ids.slice(0,4).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p1',`p1_m_${i}`,true,250,engine.arenaSize*.2,engine.arenaSize*(.2+i*.2))));const bs=engine.createBall(ROSTER[p2Ids[0]],'p2','p2_b',true,5000,engine.arenaSize*.8,engine.arenaSize/2);bs.radiusMult=(ROSTER[p2Ids[0]].radiusMult||1)*3;bs.radius=BALL_RADIUS*bs.radiusMult;bs.mass=(ROSTER[p2Ids[0]].mass||1)*10;bs.isBoss=true;engine.balls.push(bs);} else if(gameMode==='test'){engine.dpsRecords=[];engine.lastRecordTime=0;engine.balls.push(engine.createBall(ROSTER[p1Ids[0]],'p1','p1_m',true,100,engine.arenaSize*.25,engine.arenaSize/2));if(testType==='dummy'){engine.timeLimit=120;engine.balls.push(engine.createBall(ROSTER['dummy'],'p2','p2_m',true,5000,engine.arenaSize*.75,engine.arenaSize/2));}else{engine.endlessWave=1;engine.balls.push(engine.createBall(ROSTER['endless_minion'],'p2',`e_1`,true,1,engine.arenaSize/2,60));}} else if(gameMode==='regen'){p1Ids.slice(0,4).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p1',`p1_m_${i}`,true,250,engine.arenaSize*.2,engine.arenaSize*(.2+i*.2))));p2Ids.slice(0,4).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p2',`p2_m_${i}`,true,250,engine.arenaSize*.8,engine.arenaSize*(.2+i*.2))));} },
+              init: () => { engine.balls=[]; engine.projectiles=[]; engine.waves=[]; engine.particles=[]; engine.obstacles=[]; engine.time=engine.healthPackTimer=engine.globalLostHp=0; if(engine.scene==='court')engine.spawnObstacle({type:'gavel',x:engine.arenaSize/2,y:engine.arenaSize/2,radius:25,color:'#A8A29E',lifespan:99999}); if(gameMode==='ffa')for(let i=0;i<ffaCount;i++)engine.balls.push(engine.createBall(ROSTER[ffaIds[i]],`p${i+1}`,`p${i+1}_m`,true,100,engine.arenaSize/2+cos(i*(PI*2/ffaCount)-PI/2)*engine.arenaSize*0.35,engine.arenaSize/2+sin(i*(PI*2/ffaCount)-PI/2)*engine.arenaSize*0.35)); else if(gameMode==='intervention'){engine.balls.push(engine.createBall(ROSTER[p1Ids[0]],'p1','p1_m',true,100,engine.arenaSize*.25,engine.arenaSize/2));engine.balls.push(engine.createBall(ROSTER[p2Ids[0]],'p2','p2_m',true,100,engine.arenaSize*.75,engine.arenaSize/2));} else if(gameMode==='3v3'){p1Ids.slice(0,3).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p1',`p1_m_${i}`,true,500,engine.arenaSize*.2,engine.arenaSize*(.25+i*.25))));p2Ids.slice(0,3).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p2',`p2_m_${i}`,true,500,engine.arenaSize*.8,engine.arenaSize*(.25+i*.25))));} else if(gameMode==='1v4'){p1Ids.slice(0,4).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p1',`p1_m_${i}`,true,250,engine.arenaSize*.2,engine.arenaSize*(.2+i*.2))));const bs=engine.createBall(ROSTER[p2Ids[0]],'p2','p2_b',true,5000,engine.arenaSize*.8,engine.arenaSize/2);bs.radiusMult=(ROSTER[p2Ids[0]].radiusMult||1)*3;bs.radius=BALL_RADIUS*bs.radiusMult;bs.mass=(ROSTER[p2Ids[0]].mass||1)*10;bs.isBoss=true;engine.balls.push(bs);} else if(gameMode==='test'){engine.dpsRecords=[];engine.lastRecordTime=0;engine.balls.push(engine.createBall(ROSTER[p1Ids[0]],'p1','p1_m',true,100,engine.arenaSize*.25,engine.arenaSize/2));if(testType==='dummy'){engine.timeLimit=120;engine.balls.push(engine.createBall(ROSTER['dummy'],'p2','p2_m',true,5000,engine.arenaSize*.75,engine.arenaSize/2));}else{engine.endlessWave=1;engine.balls.push(engine.createBall(ROSTER['endless_minion'],'p2',`e_1`,true,1,engine.arenaSize/2,60));}} else if(gameMode==='regen'){p1Ids.slice(0,4).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p1',`p1_m_${i}`,true,250,engine.arenaSize*.2,engine.arenaSize*(.2+i*.2))));p2Ids.slice(0,4).forEach((id,i)=>engine.balls.push(engine.createBall(ROSTER[id],'p2',`p2_m_${i}`,true,250,engine.arenaSize*.8,engine.arenaSize*(.2+i*.2))));
+                engine.teamModifiers = drawRegenModifiers();
+                engine.teamVengeanceTimer = {p1:0, p2:0};
+                ['p1','p2'].forEach(tm => { if(engine.teamModifiers[tm].includes('big_target')) engine.balls.forEach(b => { if(b.team===tm) b.radius *= 1.15; }); });
+                ['p1','p2'].forEach(tm => {
+                  if(!engine.teamModifiers[tm].includes('first_strike')) return;
+                  const enemyTeam = tm==='p1'?'p2':'p1';
+                  const enemies = engine.balls.filter(b=>b.team===enemyTeam);
+                  for(let i=0;i<2 && enemies.length>0;i++){ const idx=floor(random()*enemies.length); const e=enemies.splice(idx,1)[0]; engine.applyStatus(e.uniqueId,'rooted',{duration:5}); sTxt(engine,e.x,e.y-30,'⛓️ 禁錮','#FCD34D'); }
+                });
+              } },
               update: () => {
                 engine.time+=DT;
                 // ── 熵冠者：基本電荷（碰撞消失計時，每幀僅減一次）──
@@ -239,7 +301,18 @@ const FACTIONS_META = [
                 }
                 if(gameMode==='test'){if(testType==='dummy'&&engine.timeLimit!==null){if((engine.timeLimit-=DT)<=0)return 'p2';} if(engine.time-engine.lastRecordTime>=30){engine.lastRecordTime+=30;const p1=engine.balls.find(b=>b.team==='p1'&&b.isMain);if(p1){const d=(p1.damageDealt||0)/engine.time;engine.dpsRecords.push({time:engine.lastRecordTime,dps:d.toFixed(1)});engine.spawnParticle({type:'text',x:engine.arenaSize/2,y:engine.arenaSize/4,text:`${engine.lastRecordTime}s 紀錄: ${d.toFixed(1)} DPS`,color:'#FCD34D',maxLifespan:3});}} if(testType==='endless'&&engine.balls.filter(b=>b.team==='p2'&&b.hp>0).length===0){engine.endlessWave++;engine.balls=engine.balls.filter(b=>b.team!=='p2');engine.balls.push(engine.createBall(ROSTER['endless_minion'],'p2',`e_${engine.endlessWave}`,true,engine.endlessWave,engine.arenaSize/2,60));}}
                 if((engine.healthPackTimer+=DT)>=30){engine.healthPackTimer=0;engine.spawnObstacle({type:'health_pack',x:50+random()*(engine.arenaSize-100),y:50+random()*(engine.arenaSize-100),radius:15,color:'#10B981',lifespan:14});}
-                engine.balls.forEach(b=>{b.inQuzheDomain=false;if(b.baseMaxHp===undefined)b.baseMaxHp=b.maxHp;if(b.erodedMaxHp===undefined)b.erodedMaxHp=0;if(b.portalCooldown>0)b.portalCooldown-=DT;if(b.threadFlash>0)b.threadFlash=max(0,b.threadFlash-DT);});
+                engine.balls.forEach(b=>{b.inQuzheDomain=false;if(b.baseMaxHp===undefined)b.baseMaxHp=b.maxHp;if(b.erodedMaxHp===undefined)b.erodedMaxHp=0;if(b.portalCooldown>0)b.portalCooldown-=DT;if(b.threadFlash>0)b.threadFlash=max(0,b.threadFlash-DT);if(b.recklessTimer>0)b.recklessTimer=max(0,b.recklessTimer-DT);});
+                if(gameMode==='regen'){
+                  engine.teamVengeanceTimer.p1=max(0,(engine.teamVengeanceTimer.p1||0)-DT);
+                  engine.teamVengeanceTimer.p2=max(0,(engine.teamVengeanceTimer.p2||0)-DT);
+                  const aliveP1=engine.balls.filter(b=>b.team==='p1'&&b.hp>0).length, aliveP2=engine.balls.filter(b=>b.team==='p2'&&b.hp>0).length;
+                  engine.balls.forEach(b=>{
+                    if(b.hp<=0) return;
+                    const tm=engine.teamModifiers[b.team]||[];
+                    if(tm.includes('numbers_game')){ const allyCount=b.team==='p1'?aliveP1:aliveP2, enemyCount=b.team==='p1'?aliveP2:aliveP1; if(allyCount>enemyCount) engine.applyStatus(b.uniqueId,'haste_small',{duration:0.25}); }
+                    if(tm.includes('fragile_legs') && b.hp/b.maxHp<0.5) engine.applyStatus(b.uniqueId,'slow_small',{duration:0.25});
+                  });
+                }
 
 
                 engine.balls.forEach(b => { if(b.hp<=0)return; const aS=new Set((b.statuses||[]).map(s=>s.type)), isH=aS.has('hitstop');
@@ -248,7 +321,7 @@ const FACTIONS_META = [
                   else{ const as=engine.arenaSize, r=b.radius; if(b.x-r<0){b.x=r;iS=abs(b.vx);b.vx*=-1;bW=true;}else if(b.x+r>as){b.x=as-r;iS=abs(b.vx);b.vx*=-1;bW=true;} if(b.y-r<0){b.y=r;iS=max(iS,abs(b.vy));b.vy*=-1;bW=true;}else if(b.y+r>as){b.y=as-r;iS=max(iS,abs(b.vy));b.vy*=-1;bW=true;}
                     if(bW&&!isH){ if(b.onWallBounce)b.onWallBounce(b,engine); engine.balls.forEach(tb=>{if(tb.hp>0&&tb.currentPhase===4&&(tb.id==='topiharin'||tb.copied==='topiharin')&&engine.isEnemy(b.uniqueId,tb.uniqueId)&&!b.isBlank)engine.spawnWave({x:b.x,y:b.y,startRadius:0,maxRadius:150,speed:600,color:'rgba(255,20,147,0.4)',ownerId:tb.uniqueId,lingerDuration:0.1,onHit:t=>{if(engine.isEnemy(t.uniqueId,tb.uniqueId))engine.applyDamage(t,10,tb.uniqueId,'magic');}});}); const kS=b.statuses?.find(s=>s.type==='knockback'), th=BASE_SPEED+200; if(kS&&iS>th){engine.applyDamage(b,min(b.maxHp*.35,Math.pow(iS-th,.7)*.45),kS.sourceId,'wall_collision');b.statuses=b.statuses.filter(s=>s.type!=='knockback');} }
                   }
-                  if(b.statuses){ let cSM=1; b.statuses.forEach(s=>{ s.timer+=DT; if(s.type==='burn'&&s.dps)engine.applyDamage(b,s.dps*DT,s.sourceId,'burn'); if(s.type==='slow')cSM=0.5; if(s.type==='haste')cSM*=1.5; if(s.type==='haste_double')cSM*=2; if(s.type==='stun')cSM=0.05; if(s.type==='rooted'||s.type==='hitstop')cSM=0; if(s.type==='regen')engine.applyHeal(b,5*DT); if(s.type==='regen_small')engine.applyHeal(b,3.75*DT); if(s.type==='bell_shock'&&!isH){b.vx+=s.dx*600*DT; b.vy+=s.dy*600*DT;} if(s.type==='thread_converge'&&!isH){const dx=s.centerX-b.x,dy=s.centerY-b.y,d=hypot(dx,dy)||1;b.vx+=(dx/d)*(s.strength||280)*DT;b.vy+=(dy/d)*(s.strength||280)*DT;} }); if(!isH){const tS=BASE_SPEED*(b.speedMult||1)*cSM, cS=hypot(b.vx,b.vy); if(cS>0){const ns=cS*(1-(cS>tS?.015:.05))+tS*(cS>tS?.015:.05);b.vx=(b.vx/cS)*ns;b.vy=(b.vy/cS)*ns;}} b.statuses=b.statuses.filter(s=>s.timer<s.duration); }
+                  if(b.statuses){ let cSM=1; b.statuses.forEach(s=>{ s.timer+=DT; if(s.type==='burn'&&s.dps)engine.applyDamage(b,s.dps*DT,s.sourceId,'burn'); if(s.type==='slow')cSM=0.5; if(s.type==='haste')cSM*=1.5; if(s.type==='haste_double')cSM*=2; if(s.type==='haste_small')cSM*=1.15; if(s.type==='slow_small')cSM*=0.9; if(s.type==='stun')cSM=0.05; if(s.type==='rooted'||s.type==='hitstop')cSM=0; if(s.type==='regen')engine.applyHeal(b,5*DT); if(s.type==='regen_small')engine.applyHeal(b,3.75*DT); if(s.type==='bell_shock'&&!isH){b.vx+=s.dx*600*DT; b.vy+=s.dy*600*DT;} if(s.type==='thread_converge'&&!isH){const dx=s.centerX-b.x,dy=s.centerY-b.y,d=hypot(dx,dy)||1;b.vx+=(dx/d)*(s.strength||280)*DT;b.vy+=(dy/d)*(s.strength||280)*DT;} }); if(!isH){const tS=BASE_SPEED*(b.speedMult||1)*cSM, cS=hypot(b.vx,b.vy); if(cS>0){const ns=cS*(1-(cS>tS?.015:.05))+tS*(cS>tS?.015:.05);b.vx=(b.vx/cS)*ns;b.vy=(b.vy/cS)*ns;}} b.statuses=b.statuses.filter(s=>s.timer<s.duration); }
                   if(engine.scene==='court'&&engine.judgeId&&!b.isBlank&&gameMode!=='ffa'){ engine.applyStatus(b.uniqueId,b.team===engine.plaintiffTeam?'haste':'slow',{duration:0.1}); if(b.uniqueId!==engine.judgeId){const iO=!(distance(b.x,b.y,engine.arenaSize/2,engine.arenaSize/2)<=130||abs(b.x-engine.arenaSize/2)<=55)?(b.team==='p1'?(b.x>engine.arenaSize/2+55):(b.x<engine.arenaSize/2-55)):false; if(iO&&!b.wasInO){engine.applyStatus(b.uniqueId,'silenced',{duration:1});sTxt(engine,b.x,b.y-20,'⚖️ 肅靜！','#D6D3D1',0,1);} b.wasInO=iO; } }
                   if(b.update&&!aS.has('silenced')&&!isH) b.update(b,engine);
                 });
@@ -434,7 +507,7 @@ const FACTIONS_META = [
                 return _winner;
               }
             };
-            engine.init(); engineRef.current=engine; isPausedRef.current=false; setIsPaused(false); setGameState('playing'); setGameSpeed(1); speedRef.current=1; setWinner(null);
+            engine.init(); engineRef.current=engine; isPausedRef.current=false; setIsPaused(false); setGameState('playing'); setGameSpeed(1); speedRef.current=1; setWinner(null); setRegenModifiers(gameMode==='regen' ? engine.teamModifiers : {p1:[], p2:[]});
           };
 
 
@@ -786,6 +859,13 @@ const FACTIONS_META = [
              return (
                <div className={`p-3 rounded-xl border-2 ${isP?'border-blue-500 bg-blue-950/30':'border-red-500 bg-red-950/30'} flex flex-col gap-2 w-full`}>
                  <div className="flex justify-between items-center mb-1"><span className={`text-sm font-bold ${isP?'text-blue-400':'text-red-400'}`}>{gameMode==='1v4'?(isP?'討伐小隊 (HP:250)':'首領 BOSS (HP:5000)'):(gameMode==='3v3'?(isP?'Team 1 (3人)':'Team 2 (3人)'):(gameMode==='regen'?(isP?'Team 1 (4人)':'Team 2 (4人)'):`Team ${isP?'1':'2'}`))}</span><Users size={16} className={isP?'text-blue-400':'text-red-400'} /></div>
+                 {gameMode==='regen' && gameState!=='menu' && (regenModifiers[s]||[]).length>0 && (
+                   <div className="flex flex-wrap gap-1 mb-1">
+                     {regenModifiers[s].map(mid => { const m=REGEN_MODIFIER_MAP[mid]; if(!m) return null;
+                       return <span key={mid} title={`${m.name}：${m.desc}`} className="text-[10px] font-bold px-1.5 py-0.5 rounded-full border" style={{borderColor:m.color, color:m.color, background:`${m.color}1A`}}>{m.icon} {m.name}</span>;
+                     })}
+                   </div>
+                 )}
                  {ids.map((cid, i) => { const stat=uiStats[s]?.[i];
                    const char=ROSTER[cid];
                    const isLocked = isP?p1Locks[i]:p2Locks[i];
