@@ -746,6 +746,29 @@ const ROSTER = {
             modifyDamageOut: () => 4,
             onCollide: () => {}
           },
+          prometheus0: {
+            id: 'prometheus0', faction: 'WorldCircle', name: 'Prometheus-0', title: '神經連結 / 普羅米修斯之火', color: '#67E8F9', mass: 6.0, radiusMult: 1.1,
+            desc: '【性相】秘之性相\n【被動】自身退場，留下不移動的「核心模型」駐守出生點，所受傷害即為本體傷害。\n【神經連結】場上所有單位的碰撞、技能發動、與衍生物的互動，皆被核心記錄為一次「放電」。\n【電磁脈衝】放電達10次時，向外釋放EMP脈衝灼燒敵方，傷害依前後兩次脈衝間的平均放電頻率計算（越密集越強）。\n【邊際效應】兩次脈衝之間，核心受到的傷害會隨著本區間内累積次數遞減（1/(1+0.1n)倍）。',
+            initLogic: b => { b.isCore = true; b.vx = 0; b.vy = 0; b.lastEmpTime = 0; b.marginalIndex = 0; b.scalingValue = '神經放電: 0/10'; },
+            onTakeDamage: (b, a, src, eng, dType) => { b.marginalIndex = (b.marginalIndex || 0) + 1; return a / (1 + 0.1 * b.marginalIndex); },
+            update: (b, eng) => {
+              b.vx = 0; b.vy = 0;
+              if ((eng.dischargeCount || 0) >= 10) {
+                const now = eng.time;
+                const interval = max(0.1, now - (b.lastEmpTime || 0));
+                const freq = 10 / interval;
+                const dmg = 10 + min(8, freq) * 10;
+                eng.spawnWave({ x: b.x, y: b.y, startRadius: 0, maxRadius: 500, speed: 900, color: 'rgba(125,211,252,0.45)', ownerId: b.uniqueId, lingerDuration: 0.1,
+                  onHit: t => { if (eng.isEnemy(t.uniqueId, b.uniqueId) && !t.isBlank) eng.applyDamage(t, dmg, b.uniqueId, 'magic'); }
+                });
+                sTxt(eng, b.x, b.y - 50, `⚡ EMP脈衝 (${dmg.toFixed(0)})`, '#7DD3FC', 0, 1.5);
+                eng.dischargeCount = 0;
+                b.lastEmpTime = now;
+                b.marginalIndex = 0;
+              }
+              b.scalingValue = `神經放電: ${eng.dischargeCount || 0}/10 | 邊際: 第${b.marginalIndex || 0}次傷害`;
+            }
+          },
           entropy_crown: {
             id: 'entropy_crown', faction: 'WorldCircle', name: '熵冠者', title: '物理崩潰 / 世界邊緣', color: '#DC143C', mass: 1.0, radiusMult: 1.3,
             desc: '【性相】型之性相\n【被動】每15秒隨機使一個物理常數歸零，5秒後恢復。\n【基本電荷】所有碰撞消失，但敵我穿透重疊時依重疊比例持續灼傷（100%重疊=20/秒）\n【光速】畫面如老舊電視關機般閃爍黑屏，所有計時器提前5秒\n【普朗克常數】戰場格子化，單位吸附格中心，時間本身也一格一格跳動\n【阿伏伽德羅常數】全場血量、造成傷害與成長數值5秒內隨機亂跳（不超過上限）\n【終末】四個常數都觸發後，蓄力10秒（每受20傷+1s），蓄力完成則爆發【負創】5秒200%HP傷害；若被淘汰則反轉為治療8秒，後重置。',
